@@ -1,1 +1,1 @@
-# gpt-2-persona-dialogue-pytorch
+# gpt-2-multiturn-dialogue-pytorch
