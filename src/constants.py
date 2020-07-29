@@ -13,6 +13,7 @@ train_frac = 0.8
 end_of_utterance = '__eou__'
 end_marks = ['.', ',', '?', '!']
 quotes = ['"', '\'']
+abbreviations = ['s', 'd', 't', 'm', 're', 'll', 've', 'S', 'D', 'T', 'M', 'Re', 'Ll', 'Ve']
 dialogue_split_line = "#################################"
 
 # Parameters for training
