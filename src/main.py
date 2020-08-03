@@ -1,3 +1,6 @@
+from transformers import *
+from tqdm import tqdm
+
 import torch
 
 
@@ -16,12 +19,3 @@ quotes = ['"', '\'']
 abbreviations = ['s', 'd', 't', 'm', 're', 'll', 've', 'S', 'D', 'T', 'M', 'Re', 'Ll', 'Ve']
 dialogue_split_line = "#################################"
 
-# Parameters for training
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-max_len = 300
-max_turn = 35
-batch_size = 2
-learning_rate = 0.0001
-num_epochs = 10
-nucleus_p = 0.95
-ckpt_dir = 'saved_models'
