@@ -17,18 +17,20 @@ class Manager():
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'max_len': gpt2_config['n_positions'],
+            'hidden_size': gpt2_config['n_embd'],
+            'feed_foward_size': 1024,
             'max_turn': 35,
-            'batch_size': 2,
+            'batch_size': 4,
             'learning_rate': 0.0001,
             'epoch_nums': 10,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',
-            'pad_id': self.tokenizer._convert_token_to_id['pad']
+            'pad_id': self.tokenizer._convert_token_to_id['Ġ']
         }
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
-        ## Load model
+        self.model = DialogueModel(self.config)
         self.optim = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         self.self.best_loss = sys.float_info.max
         
@@ -42,7 +44,7 @@ class Manager():
             self.best_loss = checkpoint['loss']
         else:
             print("Initializing the model...")
-            ## Only initialize linear layers
+            self.model.init_model()
               
         if mode=='train':
             # Load loss function
