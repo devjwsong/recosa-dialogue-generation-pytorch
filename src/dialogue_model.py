@@ -18,6 +18,15 @@ class DialogueModel(nn.Module):
         # Context encoding
         self.linear1 = nn.Linear(2*config['hidden_size'], config['feed_forward_size'])
         self.linear2 = nn.Linear(config['feed_forward_size'], config['hidden_size'])
+        
+        # Context RNN
+        self.context_rnn = nn.GRU(
+            input_size=config['hidden_size'],
+            hidden_size=config['hidden_size'],
+            num_layers=config['rnn_layer_num'],
+            batch_first=True,
+            drop_out=0.2
+        )
     
     def init_model(self):
         # Freeze word embedding layer
@@ -30,6 +39,7 @@ class DialogueModel(nn.Module):
             
     def forward(self, x, context):
         pass
+        
     
     def make_mask(self, input_tensor):
         return (input_tensor != config['pad_id']).long()  # (B, L)

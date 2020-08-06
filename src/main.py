@@ -20,6 +20,7 @@ class Manager():
             'hidden_size': gpt2_config['n_embd'],
             'feed_foward_size': 1024,
             'max_turn': 35,
+            'rnn_layer_num': 2,
             'batch_size': 4,
             'learning_rate': 0.0001,
             'epoch_nums': 10,
