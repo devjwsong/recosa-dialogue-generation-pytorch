@@ -60,7 +60,14 @@ class DialogueModel(nn.Module):
         p_embedded = self.positional_embedding(position_ids)  # (B, L, d_h)
         
         hidden_states = x_embedded + p_embedded
-        hidden_states = self.drop(input_sates)  # (B, L, d_h)
+        
+        # Utterance & Context combination
+        max_len = hidden_states.shape[1]
+        hidden_states = torch.cat((hidden_states, context.unsqueeze(1).repeat(1,max_len,1)), dim=-1)  # (B, L, 2d_h)
+        hidden_states = self.linear1(hidden_states)  # (B, L, d_ff)
+        hidden_states = self.linear2(hidden_states)  # (B, L, d_h)
+        
+        hidden_states = self.drop(hidden_states)  # (B, L, d_h)
         
         attention_mask = self.make_mask(x)  # (B, 1, 1, L)
         
@@ -80,9 +87,9 @@ class DialogueModel(nn.Module):
         
         # Context update
         current_context = torch.max(x_embedded + p_embedded, dim=1).unsqueeze(1)  # (B, 1, d_h)
-        prev_context = context.unsqueeze(1)  # (B, 1, d_h)
+        prev_context = context.unsqueeze(0)  # (1, B, d_h)
         _, next_context = self.context_rnn(current_context, prev_context)
-        next_context = next_context[-1]  # (B, d_h)
+        next_context = next_context.squeeze(0)  # (B, d_h)
         
         return self.softmax(hidden_states), next_context  # (B, L, d_h), (B, d_h)
         
