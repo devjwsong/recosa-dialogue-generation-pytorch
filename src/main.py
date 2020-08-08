@@ -26,7 +26,8 @@ class Manager():
             'epoch_nums': 10,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',
-            'pad_id': self.tokenizer._convert_token_to_id['Ġ']
+            'pad_id': self.tokenizer._convert_token_to_id['Ġ'],
+            'inf': 1e6
         }
         
         # Load model & optimizer      
