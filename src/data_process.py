@@ -112,12 +112,12 @@ class CustomDataset(Dataset):
         print(f"Processing {data_name}.txt...")
         turn_num = 0
         dialogue = []
-        for i, line in tqdm(lines):
+        for i, line in tqdm(enumerate(lines)):
             if line.strip() == dialogue_split_line:
                 self.turn_nums.append(turn_num)
                 turn_num = 0
                 
-                if len(dialgoue) < max_turn:
+                if len(dialogue) < max_turn:
                     left = max_turn - len(dialogue)
                     dummy = [pad_id] * max_len
                     for t in range(left):

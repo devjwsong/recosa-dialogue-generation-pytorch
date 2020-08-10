@@ -8,6 +8,7 @@ import random
 
 class DialogueModel(nn.Module):
     def __init__(self, config):
+        super().__init__()
         
         # Seed fixing
         np.random.seed(777)
@@ -24,6 +25,8 @@ class DialogueModel(nn.Module):
         self.drop = gpt2.drop
         self.decoder = gpt2.h
         self.ln_f = gpt2.ln_f
+        
+        self.output_linear = nn.Linear(self.config['hidden_size'], self.config['vocab_size'])
         self.softmax = nn.LogSoftmax(dim=-1)
         
         # Context encoding
@@ -34,9 +37,8 @@ class DialogueModel(nn.Module):
         self.context_rnn = nn.GRU(
             input_size=self.config['hidden_size'],
             hidden_size=self.config['hidden_size'],
-            num_layers=self.config['rnn_layer_num'],
+            num_layers=1,
             batch_first=True,
-            drop_out=0.2
         )
     
     def init_model(self):
@@ -45,8 +47,8 @@ class DialogueModel(nn.Module):
             param.requires_grad = False
             
         # Initialize fully connected layers
-        nn.init.xavier_uniform(self.linear1.weight)
-        nn.init.xavier_uniform(self.linear2.weight)
+        nn.init.xavier_uniform_(self.linear1.weight)
+        nn.init.xavier_uniform_(self.linear2.weight)
         
         # Initialize GRU
         for param in self.context_rnn.parameters():
@@ -77,13 +79,14 @@ class DialogueModel(nn.Module):
                 hidden_states,
                 layer_past=None,
                 attention_mask=attention_mask,
-                head_mask=None
+                head_mask=None,
                 use_cache=False
             )
             
             hidden_states, _ = outputs[:2]
             
         hidden_states = self.ln_f(hidden_states)  # (B, L, d_h)
+        hidden_states = self.output_linear(hidden_states)  # (B, L, vocab_size)
         
         # Context update
         current_context = torch.max(x_embedded + p_embedded, dim=1).unsqueeze(1)  # (B, 1, d_h)
@@ -91,7 +94,7 @@ class DialogueModel(nn.Module):
         _, next_context = self.context_rnn(current_context, prev_context)
         next_context = next_context.squeeze(0)  # (B, d_h)
         
-        return self.softmax(hidden_states), next_context  # (B, L, d_h), (B, d_h)
+        return self.softmax(hidden_states), next_context  # (B, L, vocab_size), (B, d_h)
         
         
     

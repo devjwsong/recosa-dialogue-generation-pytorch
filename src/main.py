@@ -6,34 +6,37 @@ from torch.utils.data import DataLoader
 
 import torch
 import os, sys
+import numpy as np
+import argparse
 
 
 class Manager():
     def __init__(self, mode, ckpt_name=None):
-        gpt2_config = GPT2Config()
+        gpt2_config = GPT2Config().from_pretrained('gpt2')
         self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         
-        print("Setting training configuration..."")
+        print("Setting training configuration...")
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-            'max_len': gpt2_config['n_positions'],
-            'hidden_size': gpt2_config['n_embd'],
-            'feed_foward_size': 1024,
+            'max_len': gpt2_config.n_positions,
+            'hidden_size': gpt2_config.n_embd,
+            'vocab_size': gpt2_config.vocab_size,
+            'feed_forward_size': 1024,
             'max_turn': 35,
             'batch_size': 4,
             'learning_rate': 0.0001,
             'epoch_nums': 10,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',
-            'pad_id': self.tokenizer._convert_token_to_id['Ġ'],
+            'pad_id': self.tokenizer._convert_token_to_id('Ġ'),
             'inf': 1e6
         }
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
         self.model = DialogueModel(self.config)
-        self.optim = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
-        self.self.best_loss = sys.float_info.max
+        self.optim = torch.optim.Adam(self.model.parameters(), lr=self.config['learning_rate'])
+        self.best_loss = sys.float_info.max
         
         if ckpt_name is not None:
             assert os.path.exists(f"{ckpt_dir}/{ckpt_name}"), f"There is no checkpoint named {ckpt_name}."
@@ -54,15 +57,106 @@ class Manager():
             
             # Load train & valid dataset
             print("Loading train & valid data...")
-            train_set = CustomDataset(data_type='train', self.config['max_turn'], self.config['max_len'], self.config['pad_id'])
-            valid_set = CustomDataset(data_type='valid', self.config['max_turn'], self.config['max_len'], self.config['pad_id'])
+            train_set = CustomDataset('train', self.config['max_turn'], self.config['max_len'], self.config['pad_id'])
+            valid_set = CustomDataset('valid', self.config['max_turn'], self.config['max_len'], self.config['pad_id'])
             self.train_loader = DataLoader(train_set, shuffle=True, batch_size=self.config['batch_size'])
             self.valid_loader = DataLoader(valid_set, shuffle=True, batch_size=self.config['batch_size'])
               
         print("Setting finished.")
               
     def train(self):
-        pass
+        print("Training starts.")
+              
+        for epoch in range(1, self.config['epoch_nums']+1):
+            self.model.train()
+              
+            for i, batch in tqdm(enumerate(self.train_loader)):
+                turn_num, dialogue = batch  # (B), (B, T, L)
+                turn_num, dialogue = turn_num.to(self.config['device']), dialogue.to(self.config['device'])
+              
+                dialogue_losses = []
+                for t in range(self.config['max_turn']):
+                    if t == 1:
+                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size'])
+                      
+                    if t < self.config['max_turn']-1:
+                        output, next_context = self.model(dialogue[:, t], context)  # (B, L, vocab_size), (B, d_h)
+                        context = next_context
+                        
+                        self.optim.zero_grad()
+              
+                        loss = self.criterion(
+                            output.view(-1, self.config['vocab_size']),
+                            dialogue[:, t+1].view(output.shape[0] * output.shape[1])
+                        )
+                  
+                        loss.backward()
+                        self.optim.step()
+              
+                        dialogue_losses.append(loss.item())
+              
+                del turn_num, dialogue
+                torch.cuda.empty_cache()
+              
+            mean_train_loss = np.mean(dialogue_losses)
+            print(f"#################### Epoch: {epoch} ####################")
+            print(f"Train loss: {mean_train_loss}")
+            
+            valid_loss = self.validation()
+              
+            if valid_loss < self.best_loss:
+                if not os.path.exists(ckpt_dir):
+                    os.mkdir(ckpt_dir)
+              
+                state_dict = {
+                    'model_state_dict': self.model.state_dict(),
+                    'optim_state_dict': self.optim.state_dict(),
+                    'loss': mean_train_loss
+                }
+              
+                torch.save(state_dict, f"{ckpt_dir}/best_ckpt.tar")
+                print(f"***** Current best checkpoint is saved. *****")
+                self.best_loss = valid_loss
+              
+            print(f"Best valid loss: {self.best_loss}")
+            print(f"Valid loss: {valid_loss}")
+              
+        print("Training finished!")
+    
+    def validation(self):
+        print("Validation processing...")
+        self.model.eval()
+              
+        valid_losses = []
+        
+        with torch.no_grad():
+            for i, batch in tqdm(enumerate(self.valid_loader)):
+                turn_num, dialogue = batch  # (B), (B, T, L)
+                turn_num, dialogue = turn_num.to(self.config['device']), dialogue.to(self.config['device'])
+              
+                dialogue_losses = []
+                for t in range(self.config['max_turn']):
+                    if t == 1:
+                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size'])
+                      
+                    if t < self.config['max_turn']-1:
+                        output, next_context = self.model(dialogue[:, t], context)  # (B, L, vocab_size), (B, d_h)
+                        context = next_context
+              
+                        loss = self.criterion(
+                            output.view(-1, self.config['vocab_size']),
+                            dialogue[:, t+1].view(output.shape[0] * output.shape[1])
+                        )
+              
+                        dialogue_losses.append(loss.item())
+              
+                del turn_num, dialogue
+                torch.cuda.empty_cache()
+              
+        mean_valid_loss = np.mean(valid_losses)
+              
+        return mean_valid_loss
+        
               
     def test(self):
         pass
@@ -72,4 +166,16 @@ class Manager():
 
 
 if __name__=='__main__':
-    pass
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', required=True, help="train or test?")
+    parser.add_argument('--ckpt_name', required=False, help="best checkpoint file")
+              
+    args = parser.parse_args()
+              
+    if args.mode == 'train':
+        if args.ckpt_name is not None:
+            manager = Manager(args.mode, ckpt_name=args.ckpt_name)
+        else:
+            manager = Manager(args.mode)
+              
+        manager.train()
