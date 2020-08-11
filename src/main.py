@@ -145,7 +145,7 @@ class Manager():
               
                         loss = self.criterion(
                             output.view(-1, self.config['vocab_size']),
-                            dialogue[:, t+1].view(output.shape[0] * output.shape[1])
+                            dialogue[:, t+1].contiguous().view(output.shape[0] * output.shape[1])
                         )
               
                         dialogue_losses.append(loss.item())
