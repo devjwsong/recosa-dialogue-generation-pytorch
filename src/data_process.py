@@ -122,8 +122,12 @@ class CustomDataset(Dataset):
                     dummy = [pad_id] * max_len
                     for t in range(left):
                         dialogue.append(dummy)
+                        
+                self.dialogues.append(dialogue)
+                dialogue = []
             else:
                 tokens = line.strip().split(' ')
+                tokens = [int(token) for token in tokens]
                 left = max_len - len(tokens)
                 tokens += ([pad_id] * left)  # (L)
                 dialogue.append(tokens)

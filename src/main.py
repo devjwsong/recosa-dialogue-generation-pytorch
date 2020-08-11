@@ -23,7 +23,7 @@ class Manager():
             'vocab_size': gpt2_config.vocab_size,
             'feed_forward_size': 1024,
             'max_turn': 35,
-            'batch_size': 4,
+            'batch_size': 2,
             'learning_rate': 0.0001,
             'epoch_nums': 10,
             'nucleus_p': 0.95,
@@ -34,7 +34,7 @@ class Manager():
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
-        self.model = DialogueModel(self.config)
+        self.model = DialogueModel(self.config).to(self.config['device'])
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.config['learning_rate'])
         self.best_loss = sys.float_info.max
         
@@ -70,14 +70,14 @@ class Manager():
         for epoch in range(1, self.config['epoch_nums']+1):
             self.model.train()
               
-            for i, batch in tqdm(enumerate(self.train_loader)):
+            for i, batch in enumerate(tqdm(self.train_loader)):
                 turn_num, dialogue = batch  # (B), (B, T, L)
                 turn_num, dialogue = turn_num.to(self.config['device']), dialogue.to(self.config['device'])
               
                 dialogue_losses = []
                 for t in range(self.config['max_turn']):
-                    if t == 1:
-                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size'])
+                    if t == 0:
+                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size']).to(self.config['device'])
                       
                     if t < self.config['max_turn']-1:
                         output, next_context = self.model(dialogue[:, t], context)  # (B, L, vocab_size), (B, d_h)
@@ -87,10 +87,10 @@ class Manager():
               
                         loss = self.criterion(
                             output.view(-1, self.config['vocab_size']),
-                            dialogue[:, t+1].view(output.shape[0] * output.shape[1])
+                            dialogue[:, t+1].contiguous().view(output.shape[0] * output.shape[1])
                         )
                   
-                        loss.backward()
+                        loss.backward(retain_graph=True)
                         self.optim.step()
               
                         dialogue_losses.append(loss.item())
@@ -130,14 +130,14 @@ class Manager():
         valid_losses = []
         
         with torch.no_grad():
-            for i, batch in tqdm(enumerate(self.valid_loader)):
+            for i, batch in enumerate(tqdm(self.valid_loader)):
                 turn_num, dialogue = batch  # (B), (B, T, L)
                 turn_num, dialogue = turn_num.to(self.config['device']), dialogue.to(self.config['device'])
               
                 dialogue_losses = []
                 for t in range(self.config['max_turn']):
-                    if t == 1:
-                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size'])
+                    if t == 0:
+                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size']).to(self.config['device'])
                       
                     if t < self.config['max_turn']-1:
                         output, next_context = self.model(dialogue[:, t], context)  # (B, L, vocab_size), (B, d_h)

@@ -16,8 +16,8 @@ class DialogueModel(nn.Module):
         torch.cuda.manual_seed_all(777)
         random.seed(777)
         
-        gpt2 = GPT2Model.from_pretrained('gpt2')
         self.config = config
+        gpt2 = GPT2Model.from_pretrained('gpt2')
         
         # GPT2 components
         self.embedding = gpt2.wte
@@ -89,7 +89,7 @@ class DialogueModel(nn.Module):
         hidden_states = self.output_linear(hidden_states)  # (B, L, vocab_size)
         
         # Context update
-        current_context = torch.max(x_embedded + p_embedded, dim=1).unsqueeze(1)  # (B, 1, d_h)
+        current_context = torch.max(x_embedded + p_embedded, dim=1).values.unsqueeze(1)  # (B, 1, d_h)
         prev_context = context.unsqueeze(0)  # (1, B, d_h)
         _, next_context = self.context_rnn(current_context, prev_context)
         next_context = next_context.squeeze(0)  # (B, d_h)
@@ -99,7 +99,7 @@ class DialogueModel(nn.Module):
         
     
     def make_mask(self, input_tensor):
-        mask = (input_tensor != config['pad_id']).float()  # (B, L)
+        mask = (input_tensor != self.config['pad_id']).float()  # (B, L)
         mask = mask.view(input_tensor.shape[0], -1)
         mask = mask.unsqueeze(1).unsqueeze(2)  # (B, 1, 1, L)
         mask = mask.to(dtype=next(self.decoder.parameters()).dtype)
