@@ -1,9 +1,7 @@
 from tqdm import tqdm
-from torch.utils.data import Dataset
 
 import torch
 import os
-import numpy as np
 import sentencepiece as spm
 
 
@@ -108,56 +106,6 @@ def save_data(lines, tokenizer, name):
                 utter_str = [str(idx) for idx in utter]
                 f.write(f"{' '.join(utter_str)}\n")
             f.write(f"{dialogue_split_line}\n")
-
-
-class CustomDataset(Dataset):
-    def __init__(self, data_type, max_turn, max_len, pad_id):
-        assert data_type == 'train' or data_type == 'valid', "Data type incorrect. It should be 'train' or 'valid'."
-        
-        if data_type == 'train':
-            data_name = train_name
-        elif data_type == 'valid':
-            data_name = valid_name
-        
-        print(f"Loading {data_name}.txt...")
-        with open(f"{data_dir}/{processed_data_dir}/{data_name}.txt", 'r') as f:
-            lines = f.readlines()
-        
-        self.turn_nums = []  # (N)
-        self.dialogues = []  # (N, T, L)
-        
-        print(f"Processing {data_name}.txt...")
-        turn_num = 0
-        dialogue = []
-        for i, line in tqdm(enumerate(lines)):
-            if line.strip() == dialogue_split_line:
-                self.turn_nums.append(turn_num)
-                turn_num = 0
-                
-                if len(dialogue) < max_turn:
-                    left = max_turn - len(dialogue)
-                    dummy = [pad_id] * max_len
-                    for t in range(left):
-                        dialogue.append(dummy)
-                        
-                self.dialogues.append(dialogue)
-                dialogue = []
-            else:
-                tokens = line.strip().split(' ')
-                tokens = [int(token) for token in tokens]
-                left = max_len - len(tokens)
-                tokens += ([pad_id] * left)  # (L)
-                dialogue.append(tokens)
-                
-        self.turn_nums = torch.LongTensor(self.turn_nums)
-        self.dialogues = torch.LongTensor(self.dialogues)
-            
-    
-    def __len__(self):
-        return self.turn_nums.shape[0]
-    
-    def __getitem__(self, idx):
-        return self.turn_nums[idx], self.dialogues[idx]
 
 
 if __name__=='__main__':
