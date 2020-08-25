@@ -1,5 +1,7 @@
 from torch.utils.data import Dataset
 
+import torch
+
 
 class CustomDataset(Dataset):
     def __init__(self, data_type, max_turn, max_len, pad_id, bos_id, eos_id, dialogue_split_line):

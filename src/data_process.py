@@ -119,7 +119,7 @@ if __name__=='__main__':
     
     print("Loading SentencePiece Tokenizer...")
     tokenizer = spm.SentencePieceProcessor()
-    tokenizer.Load(f"{data_dir}/{sp_dir}/{sp_prefix}.model")
+    tokenizer.Load(f"{sp_dir}/{sp_prefix}.model")
     
     if not os.path.isdir(f"{data_dir}/{processed_dir}"):
         os.mkdir(f"{data_dir}/{processed_dir}")

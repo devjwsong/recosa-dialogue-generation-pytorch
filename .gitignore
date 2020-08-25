@@ -131,11 +131,11 @@ dmypy.json
 # nohup
 nohup.out
 
-# large size directories
+# Large size directories
 data/
 saved_models/
 
-# notebook
+# Notebook
 run.ipynb
 nohup.out
 
