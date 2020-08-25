@@ -133,8 +133,11 @@ nohup.out
 
 # large size directories
 data/
-saved_model/
+saved_models/
 
 # notebook
 run.ipynb
 nohup.out
+
+# Unnecessary source files
+src/sentencepiece_train.py
