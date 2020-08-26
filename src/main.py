@@ -1,6 +1,5 @@
-from transformers import *
 from dialogue_model import *
-from data_process import *
+from custom_data import *
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
@@ -8,35 +7,46 @@ import torch
 import os, sys
 import numpy as np
 import argparse
+import sentencepiece as spm
 
 
 class Manager():
     def __init__(self, mode, ckpt_name=None):
-        gpt2_config = GPT2Config().from_pretrained('gpt2')
-        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        
         print("Setting training configuration...")
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'learning_rate': 0.0001,
-            'batch_size': 2,
+            'batch_size': 5,
+            'epoch_num': 10,
             'max_len': 256,
             'head_num': 8,
             'layer_num': 6,
-            'd_model': gpt2_config.n_embd,
-            'd_ff': 1024,
-            'vocab_size': gpt2_config.vocab_size,
+            'd_model': 512,
+            'd_ff': 2048,
             'drop_out_rate': 0.1,
             'max_turn': 35,
-            
-            
-            'epoch_nums': 10,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',
-            'pad_id': self.tokenizer._convert_token_to_id('Ġ'),
-            'inf': 1e6,
+            'data_dir': 'data',
+            'train_name': 'train',
+            'valid_name': 'validation',
+            'processed_dir': 'processed',
+            'sp_dir': 'trained_sp',
+            'sp_prefix': 'sp',
+            'pad_id': 0,
+            'bos_id': 1,
+            'eos_id': 2,
+            'unk_id': 3,
+            'dialogue_split_line': '[END OF DIALOGUE]',
             'end_command': 'abort!'
         }
+        
+        # Sentencepiece tokenizer & vocab
+        self.tokenizer = spm.SentencePieceProcessor()
+        self.tokenizer.Load(f"{self.config['sp_dir']}/{self.config['sp_prefix']}.model")
+        with open(f"{self.config['sp_dir']}/{self.config['sp_prefix']}.vocab", 'r') as f:
+            lines = f.readlines()
+        self.config['vocab_size'] = len(lines)
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
@@ -66,8 +76,8 @@ class Manager():
             
             # Load train & valid dataset
             print("Loading train & valid data...")
-            train_set = CustomDataset('train', self.config['max_turn'], self.config['max_len'], self.config['pad_id'])
-            valid_set = CustomDataset('valid', self.config['max_turn'], self.config['max_len'], self.config['pad_id'])
+            train_set = CustomDataset('train', self.config)
+            valid_set = CustomDataset('valid', self.config)
             self.train_loader = DataLoader(train_set, shuffle=True, batch_size=self.config['batch_size'])
             self.valid_loader = DataLoader(valid_set, shuffle=True, batch_size=self.config['batch_size'])
         elif mode == 'test':
@@ -80,28 +90,32 @@ class Manager():
     def train(self):
         print("Training starts.")
               
-        for epoch in range(1, self.config['epoch_nums']+1):
+        for epoch in range(1, self.config['epoch_num']+1):
             self.model.train()
             
             train_losses = []  
             for i, batch in enumerate(tqdm(self.train_loader)):
-                turn_num, dialogue = batch  # (B), (B, T, L)
-                turn_num, dialogue = turn_num.to(self.config['device']), dialogue.to(self.config['device'])
+                src_inputs, trg_inputs, trg_outputs = batch[:, :, 0], batch[:, :, 1], batch[:, :, 2]  # (B, T, L)
               
                 dialogue_losses = []
                 for t in range(self.config['max_turn']):
                     if t == 0:
-                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size']).to(self.config['device'])
+                        context = torch.zeros(src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
                       
                     if t < self.config['max_turn']-1:
-                        output, next_context = self.model(dialogue[:, t], context)  # (B, L, vocab_size), (B, d_h)
-                        context = next_context
+                        src_input, trg_input, trg_output = \
+                            src_inputs[:, t].to(self.config['device']), \
+                            trg_inputs[:, t].to(self.config['device']), \
+                            trg_outputs[: ,t].to(self.config['device'])  # (B, L)
+                        e_mask, d_mask = self.model.make_mask(src_input, trg_input)  # (B, 1, L), (B, L, L)
+                        
+                        output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
                         
                         self.optim.zero_grad()
               
                         loss = self.criterion(
                             output.view(-1, self.config['vocab_size']),
-                            dialogue[:, t+1].contiguous().view(output.shape[0] * output.shape[1])
+                            trg_output.contiguous().view(output.shape[0] * output.shape[1])
                         )
                   
                         loss.backward(retain_graph=True)
@@ -109,10 +123,10 @@ class Manager():
               
                         dialogue_losses.append(loss.item())
                 
+                        del src_input, trg_input, trg_output, e_mask, d_mask
+                        torch.cuda.empty_cache()
+                
                 train_losses += dialogue_losses
-              
-                del turn_num, dialogue
-                torch.cuda.empty_cache()
               
             mean_train_loss = np.mean(train_losses)
             print(f"#################### Epoch: {epoch} ####################")
@@ -143,29 +157,33 @@ class Manager():
         valid_losses = []
         with torch.no_grad():
             for i, batch in enumerate(tqdm(self.valid_loader)):
-                turn_num, dialogue = batch  # (B), (B, T, L)
-                turn_num, dialogue = turn_num.to(self.config['device']), dialogue.to(self.config['device'])
+                src_inputs, trg_inputs, trg_outputs = batch[:, :, 0], batch[:, :, 1], batch[:, :, 2]  # (B, T, L)
               
                 dialogue_losses = []
                 for t in range(self.config['max_turn']):
                     if t == 0:
-                        context = torch.zeros(dialogue.shape[0], self.config['hidden_size']).to(self.config['device'])
+                        context = torch.zeros(src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
                       
                     if t < self.config['max_turn']-1:
-                        output, next_context = self.model(dialogue[:, t], context)  # (B, L, vocab_size), (B, d_h)
-                        context = next_context
+                        src_input, trg_input, trg_output = \
+                            src_inputs[:, t].to(self.config['device']), \
+                            trg_inputs[:, t].to(self.config['device']), \
+                            trg_outputs[: ,t].to(self.config['device'])  # (B, L)
+                        e_mask, d_mask = self.model.make_mask(src_input, trg_input)  # (B, 1, L), (B, L, L)
+                        
+                        output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
               
                         loss = self.criterion(
                             output.view(-1, self.config['vocab_size']),
-                            dialogue[:, t+1].contiguous().view(output.shape[0] * output.shape[1])
+                            trg_output.contiguous().view(output.shape[0] * output.shape[1])
                         )
               
                         dialogue_losses.append(loss.item())
-              
-                valid_losses += dialogue_losses
                 
-                del turn_num, dialogue
-                torch.cuda.empty_cache()
+                        del src_input, trg_input, trg_output, e_mask, d_mask
+                        torch.cuda.empty_cache()
+                    
+                valid_losses += dialogue_losses
               
         mean_valid_loss = np.mean(valid_losses)
               
@@ -173,41 +191,10 @@ class Manager():
         
               
     def test(self):
-        print("Dialogue start!")
-        self.model.eval()
-        
-        context = None
-        print("Please type your input to start the conversation.")
-        print(f"If you want to finish this conversation, please type {self.config['end_command']}.")
-        while True:
-            input_sentence = input()
-            
-            if input_sentence == self.config['end_command']:
-                break
-            else:
-                tokens = self.tokenizer.tokenize(input_sentence)
-                ids = [self.tokenizer._convert_token_to_id(token) for token in tokens]
-                
-                if len(ids) <= self.config['max_len']:
-                    left = self.config['max_len'] - len(ids)
-                    ids += [self.config['pad_id']] * left
-                else:
-                    ids = ids[:self.config['max_len']]
-                    
-                x = torch.LongTensor(ids).unsqueeze(0)  # (1, L)
-                
-                if context is None:
-                    context = torch.zeros(dialogue.shape[0], self.config['hidden_size']).to(self.config['device'])
-                    
-                
-                
-                
-                
-        print("Dialogue finished. Thank you.")
+        pass
 
     def nucleus_sampling(self, x, context):
-        for pos in range(self.config['max_len']):
-            pass
+        pass
         
         
 

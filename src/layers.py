@@ -12,11 +12,11 @@ class EncoderLayer(nn.Module):
         self.head_num = head_num
         self.drop_out_rate = drop_out_rate
         
-        self.layer_norm_1 = LayerNormalization()
+        self.layer_norm_1 = LayerNormalization(self.d_model)
         self.multihead_attention = MultiheadAttention(self.d_model, self.head_num, self.drop_out_rate)
         self.drop_out_1 = nn.Dropout(self.drop_out_rate)
 
-        self.layer_norm_2 = LayerNormalization()
+        self.layer_norm_2 = LayerNormalization(self.d_model)
         self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.drop_out_rate)
         self.drop_out_2 = nn.Dropout(self.drop_out_rate)
 
@@ -39,15 +39,15 @@ class DecoderLayer(nn.Module):
         self.head_num = head_num
         self.drop_out_rate = drop_out_rate
         
-        self.layer_norm_1 = LayerNormalization()
+        self.layer_norm_1 = LayerNormalization(self.d_model)
         self.masked_multihead_attention = MultiheadAttention(self.d_model, self.head_num, self.drop_out_rate)
         self.drop_out_1 = nn.Dropout(self.drop_out_rate)
 
-        self.layer_norm_2 = LayerNormalization()
+        self.layer_norm_2 = LayerNormalization(self.d_model)
         self.multihead_attention = MultiheadAttention(self.d_model, self.head_num, self.drop_out_rate)
         self.drop_out_2 = nn.Dropout(self.drop_out_rate)
 
-        self.layer_norm_3 = LayerNormalization()
+        self.layer_norm_3 = LayerNormalization(self.d_model)
         self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.drop_out_rate)
         self.drop_out_3 = nn.Dropout(self.drop_out_rate)
 
@@ -108,7 +108,7 @@ class MultiheadAttention(nn.Module):
     def self_attention(self, q, k, v, mask=None):
         # Calculate attention scores with scaled dot-product attention
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) # (B, H, L, L)
-        attn_scores = attn_scores / math.sqrt(d_k)
+        attn_scores = attn_scores / math.sqrt(self.d_k)
 
         # If there is a mask, make masked spots -INF
         if mask is not None:
@@ -129,7 +129,7 @@ class FeedFowardLayer(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.drop_out_rate
+        self.drop_out_rate = drop_out_rate
         
         self.linear_1 = nn.Linear(self.d_model, self.d_ff, bias=True)
         self.relu = nn.ReLU()
@@ -149,7 +149,7 @@ class LayerNormalization(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.eps = eps
-        self.layer = nn.LayerNorm([d_model], elementwise_affine=True, eps=self.eps)
+        self.layer = nn.LayerNorm([self.d_model], elementwise_affine=True, eps=self.eps)
 
     def forward(self, x):
         x = self.layer(x)
@@ -158,8 +158,9 @@ class LayerNormalization(nn.Module):
 
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, max_len, d_model):
+    def __init__(self, max_len, d_model, device):
         super().__init__()
+        self.device = device
         self.max_len = max_len
         self.d_model = d_model
         
@@ -175,7 +176,7 @@ class PositionalEncoder(nn.Module):
                     pe_matrix[pos, i] = math.cos(pos / (10000 ** (2 * i / self.d_model)))
 
         pe_matrix = pe_matrix.unsqueeze(0) # (1, L, d_model)
-        self.positional_encoding = pe_matrix.to(device=device).requires_grad_(False)
+        self.positional_encoding = pe_matrix.to(self.device).requires_grad_(False)
 
     def forward(self, x):
         x = x * math.sqrt(self.d_model) # (B, L, d_model)

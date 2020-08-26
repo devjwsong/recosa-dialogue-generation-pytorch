@@ -20,9 +20,9 @@ class DialogueModel(nn.Module):
         
         # Transformer components
         self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
-        self.positional_embedding = PositionalEncoder(self.config['max_len'], self.config['d_model'])
-        self.encoder = Encoder(self.config['layer_num'], self.config['drop_out_rate'])
-        self.decoder = Decoder(self.config['layer_num'], self.config['drop_out_rate'])
+        self.positional_embedding = PositionalEncoder(self.config['max_len'], self.config['d_model'], self.config['device'])
+        self.encoder = Encoder(self.config['d_model'], self.config['d_ff'], self.config['head_num'], self.config['drop_out_rate'], self.config['layer_num'])
+        self.decoder = Decoder(self.config['d_model'], self.config['d_ff'], self.config['head_num'], self.config['drop_out_rate'], self.config['layer_num'])
         
         self.output_linear = nn.Linear(self.config['d_model'], self.config['vocab_size'])
         self.softmax = nn.LogSoftmax(dim=-1)
@@ -61,7 +61,7 @@ class DialogueModel(nn.Module):
         e_output = self.linear2(e_output)  # (B, L, d_model)
         
         # Decoding phase
-        d_output = self.decoder(trg_input, e_output, e_mask, d_mask)  # (B, L, d_model)
+        d_output = self.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, d_model)
         
         output = self.softmax(self.output_linear(d_output))  # (B, L, vocab_size)
         
@@ -76,14 +76,14 @@ class DialogueModel(nn.Module):
         e_mask = (src_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
         d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
 
-        nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool)  # (1, L, L)
+        nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool).to(self.config['device'])  # (1, L, L)
         nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
         d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
 
         return e_mask, d_mask
     
     def context_update(self, prev_context, e_output):
-        cur_context = torch.max(e_output, dim=1).values.unqueeze(1)  # (B, 1, d_model)
+        cur_context = torch.max(e_output, dim=1).values.unsqueeze(1)  # (B, 1, d_model)
         _, next_context = self.context_rnn(cur_context, prev_context.unsqueeze(0))  # (1, B, d_model)
         next_context = next_context.squeeze(0) # (B, d_model)
         
@@ -100,7 +100,7 @@ class Encoder(nn.Module):
         self.layer_num = layer_num
         
         self.layers = nn.ModuleList([EncoderLayer(self.d_model, self.d_ff, self.head_num, self.drop_out_rate) for i in range(self.layer_num)])
-        self.layer_norm = LayerNormalization()
+        self.layer_norm = LayerNormalization(self.d_model)
 
     def forward(self, x, e_mask):
         for i in range(self.layer_num):
@@ -119,7 +119,7 @@ class Decoder(nn.Module):
         self.layer_num = layer_num
         
         self.layers = nn.ModuleList([DecoderLayer(self.d_model, self.d_ff, self.head_num, self.drop_out_rate) for i in range(self.layer_num)])
-        self.layer_norm = LayerNormalization()
+        self.layer_norm = LayerNormalization(self.d_model)
 
     def forward(self, x, e_output, e_mask, d_mask):
         for i in range(self.layer_num):
