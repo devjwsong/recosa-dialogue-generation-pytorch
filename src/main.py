@@ -18,13 +18,18 @@ class Manager():
         print("Setting training configuration...")
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-            'max_len': gpt2_config.n_positions,
-            'hidden_size': gpt2_config.n_embd,
-            'vocab_size': gpt2_config.vocab_size,
-            'feed_forward_size': 1024,
-            'max_turn': 35,
-            'batch_size': 2,
             'learning_rate': 0.0001,
+            'batch_size': 2,
+            'max_len': 256,
+            'head_num': 8,
+            'layer_num': 6,
+            'd_model': gpt2_config.n_embd,
+            'd_ff': 1024,
+            'vocab_size': gpt2_config.vocab_size,
+            'drop_out_rate': 0.1,
+            'max_turn': 35,
+            
+            
             'epoch_nums': 10,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',

@@ -1,4 +1,4 @@
-from transformers import *
+from layers import *
 from torch import nn
 
 import torch
@@ -17,91 +17,112 @@ class DialogueModel(nn.Module):
         random.seed(777)
         
         self.config = config
-        gpt2 = GPT2Model.from_pretrained('gpt2')
         
-        # GPT2 components
-        self.embedding = gpt2.wte
-        self.positional_embedding = gpt2.wpe
-        self.drop = gpt2.drop
-        self.decoder = gpt2.h
-        self.ln_f = gpt2.ln_f
+        # Transformer components
+        self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
+        self.positional_embedding = PositionalEncoder(self.config['max_len'], self.config['d_model'])
+        self.encoder = Encoder(self.config['layer_num'], self.config['drop_out_rate'])
+        self.decoder = Decoder(self.config['layer_num'], self.config['drop_out_rate'])
         
-        self.output_linear = nn.Linear(self.config['hidden_size'], self.config['vocab_size'])
+        self.output_linear = nn.Linear(self.config['d_model'], self.config['vocab_size'])
         self.softmax = nn.LogSoftmax(dim=-1)
         
         # Context encoding
-        self.linear1 = nn.Linear(2*self.config['hidden_size'], self.config['feed_forward_size'])
-        self.linear2 = nn.Linear(self.config['feed_forward_size'], self.config['hidden_size'])
+        self.linear1 = nn.Linear(2*self.config['d_model'], self.config['d_ff'])
+        self.linear2 = nn.Linear(self.config['d_ff'], self.config['d_model'])
         
         # Context RNN
         self.context_rnn = nn.GRU(
-            input_size=self.config['hidden_size'],
-            hidden_size=self.config['hidden_size'],
+            input_size=self.config['d_model'],
+            hidden_size=self.config['d_model'],
             num_layers=1,
             batch_first=True,
         )
     
-    def init_model(self):
-        # Freeze word embedding layer
-        for param in self.embedding.parameters():
-            param.requires_grad = False
-            
-        # Initialize fully connected layers
-        nn.init.xavier_uniform_(self.linear1.weight)
-        nn.init.xavier_uniform_(self.linear2.weight)
-        
-        # Initialize GRU
-        for param in self.context_rnn.parameters():
+    def init_model(self):            
+        # Initialize parameters
+        for param in self.parameters():
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
             
-    def forward(self, x, context):
-        x_embedded = self.embedding(x)  # (B, L, d_h)
+    def forward(self, src_input, trg_input, e_mask, d_mask, context):
+        # Embeddings
+        src_emb = self.embedding(src_input)  # (B, L, d_model)
+        src_emb = self.positional_embedding(src_emb)  # (B, L, d_model)
+        trg_emb = self.embedding(trg_input)  # (B, L, d_model)
+        trg_emb = self.positional_embedding(trg_emb)  # (B, L, d_model)
         
-        position_ids = torch.arange(0, x.shape[-1], dtype=torch.long).to(self.config['device'])
-        p_embedded = self.positional_embedding(position_ids)  # (B, L, d_h)
+        # Encoding phase
+        e_output = self.encoder(src_emb, e_mask)  # (B, L, d_model)
         
-        hidden_states = x_embedded + p_embedded
-        
-        # Utterance & Context combination
-        max_len = hidden_states.shape[1]
-        hidden_states = torch.cat((hidden_states, context.unsqueeze(1).repeat(1,max_len,1)), dim=-1)  # (B, L, 2d_h)
-        hidden_states = self.linear1(hidden_states)  # (B, L, d_ff)
-        hidden_states = self.linear2(hidden_states)  # (B, L, d_h)
-        
-        hidden_states = self.drop(hidden_states)  # (B, L, d_h)
-        
-        attention_mask = self.make_mask(x)  # (B, 1, 1, L)
+        # Encoded input & context combination
+        e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, 2d_model)
+        e_output = self.linear1(e_output)  # (B, L, d_ff)
+        e_output = self.linear2(e_output)  # (B, L, d_model)
         
         # Decoding phase
-        for i, layer in enumerate(self.decoder):
-            outputs = layer(
-                hidden_states,
-                layer_past=None,
-                attention_mask=attention_mask,
-                head_mask=None,
-                use_cache=False
-            )
-            
-            hidden_states, _ = outputs[:2]
-            
-        hidden_states = self.ln_f(hidden_states)  # (B, L, d_h)
-        hidden_states = self.output_linear(hidden_states)  # (B, L, vocab_size)
+        d_output = self.decoder(trg_input, e_output, e_mask, d_mask)  # (B, L, d_model)
+        
+        output = self.softmax(self.output_linear(d_output))  # (B, L, vocab_size)
         
         # Context update
-        current_context = torch.max(x_embedded + p_embedded, dim=1).values.unsqueeze(1)  # (B, 1, d_h)
-        prev_context = context.unsqueeze(0)  # (1, B, d_h)
-        _, next_context = self.context_rnn(current_context, prev_context)
-        next_context = next_context.squeeze(0)  # (B, d_h)
+        next_context = self.context_update(context, e_output)  # (B, d_model)
         
-        return self.softmax(hidden_states), next_context  # (B, L, vocab_size), (B, d_h)
+        return output, next_context  # (B, L, vocab_size), (B, d_model)
         
         
     
-    def make_mask(self, input_tensor):
-        mask = (input_tensor != self.config['pad_id']).float()  # (B, L)
-        mask = mask.view(input_tensor.shape[0], -1)
-        mask = mask.unsqueeze(1).unsqueeze(2)  # (B, 1, 1, L)
-        mask = mask.to(dtype=next(self.decoder.parameters()).dtype)
+    def make_mask(self, src_input, trg_input):
+        e_mask = (src_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
+        d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
+
+        nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool)  # (1, L, L)
+        nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
+        d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
+
+        return e_mask, d_mask
+    
+    def context_update(self, prev_context, e_output):
+        cur_context = torch.max(e_output, dim=1).values.unqueeze(1)  # (B, 1, d_model)
+        _, next_context = self.context_rnn(cur_context, prev_context.unsqueeze(0))  # (1, B, d_model)
+        next_context = next_context.squeeze(0) # (B, d_model)
         
-        return (1.0 - mask) * self.config['inf']  # (B, 1, 1, L)
+        return next_context
+
+    
+class Encoder(nn.Module):
+    def __init__(self, d_model, d_ff, head_num, drop_out_rate, layer_num):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.head_num = head_num
+        self.drop_out_rate = drop_out_rate
+        self.layer_num = layer_num
+        
+        self.layers = nn.ModuleList([EncoderLayer(self.d_model, self.d_ff, self.head_num, self.drop_out_rate) for i in range(self.layer_num)])
+        self.layer_norm = LayerNormalization()
+
+    def forward(self, x, e_mask):
+        for i in range(self.layer_num):
+            x = self.layers[i](x, e_mask)
+
+        return self.layer_norm(x)
+
+
+class Decoder(nn.Module):
+    def __init__(self, d_model, d_ff, head_num, drop_out_rate, layer_num):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.head_num = head_num
+        self.drop_out_rate = drop_out_rate
+        self.layer_num = layer_num
+        
+        self.layers = nn.ModuleList([DecoderLayer(self.d_model, self.d_ff, self.head_num, self.drop_out_rate) for i in range(self.layer_num)])
+        self.layer_norm = LayerNormalization()
+
+    def forward(self, x, e_output, e_mask, d_mask):
+        for i in range(self.layer_num):
+            x = self.layers[i](x, e_output, e_mask, d_mask)
+
+        return self.layer_norm(x)    
