@@ -70,7 +70,6 @@ class DialogueModel(nn.Module):
         
         return output, next_context  # (B, L, vocab_size), (B, d_model)
         
-        
     
     def make_mask(self, src_input, trg_input):
         e_mask = (src_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
