@@ -2,17 +2,19 @@ from dialogue_model import *
 from custom_data import *
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torch.nn import functional as F
 
 import torch
 import os, sys
 import numpy as np
 import argparse
 import sentencepiece as spm
+import time
 
 
 class Manager():
     def __init__(self, mode, ckpt_name=None):
-        print("Setting training configuration...")
+        print("Setting the configurations...")
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'learning_rate': 0.0001,
@@ -58,7 +60,7 @@ class Manager():
             os.mkdir(self.config['ckpt_dir'])
         
         if ckpt_name is not None:
-            assert os.path.exists(f"{ckpt_dir}/{ckpt_name}"), f"There is no checkpoint named {ckpt_name}."
+            assert os.path.exists(f"{self.config['ckpt_dir']}/{ckpt_name}"), f"There is no checkpoint named {ckpt_name}."
 
             print("Loading checkpoint...")
             checkpoint = torch.load(f"{self.config['ckpt_dir']}/{ckpt_name}")
@@ -80,10 +82,6 @@ class Manager():
             valid_set = CustomDataset('valid', self.config)
             self.train_loader = DataLoader(train_set, shuffle=True, batch_size=self.config['batch_size'])
             self.valid_loader = DataLoader(valid_set, shuffle=True, batch_size=self.config['batch_size'])
-        elif mode == 'test':
-            print("Loading the trained model...")
-            checkpoint = torch.load(f"{self.config['ckpt_dir']}/{ckpt_name}")
-            self.model.load_state_dict(checkpoint['model_state_dict'])
               
         print("Setting finished.")
               
@@ -93,6 +91,7 @@ class Manager():
         for epoch in range(1, self.config['epoch_num']+1):
             self.model.train()
             
+            print(f"#################### Epoch: {epoch} ####################")
             train_losses = []  
             for i, batch in enumerate(tqdm(self.train_loader)):
                 src_inputs, trg_inputs, trg_outputs = batch[:, :, 0], batch[:, :, 1], batch[:, :, 2]  # (B, T, L)
@@ -129,7 +128,6 @@ class Manager():
                 train_losses += dialogue_losses
               
             mean_train_loss = np.mean(train_losses)
-            print(f"#################### Epoch: {epoch} ####################")
             print(f"Train loss: {mean_train_loss}")
             
             valid_loss = self.validation()
@@ -191,11 +189,102 @@ class Manager():
         
               
     def test(self):
-        pass
-
-    def nucleus_sampling(self, x, context):
-        pass
+        print("Let's start!")
+        print(f"If you want to quit the converstation, please type \"{self.config['end_command']}\".")
+        self.model.eval()
         
+        with torch.no_grad():
+            utter = None
+            context = None
+            for t in range(self.config['max_turn']):
+                if t % 2 == 0:
+                    utter = input("You: ")
+                    
+                if utter == self.config['end_command']:
+                    print("Bot: Good bye.")
+                    break
+
+                tokens = self.tokenizer.EncodeAsIds(utter)
+                if len(tokens) < self.config['max_len']:
+                    src_input = tokens + [self.config['eos_id']]
+                    src_input += [self.config['pad_id']] * (self.config['max_len'] - len(src_input))
+                else:
+                    src_input = src_input[:self.config['max_len']]
+                    src_input[-1] = self.config['eos_id']
+
+                src_input = torch.LongTensor(src_input).unsqueeze(0).to(self.config['device'])  # (B, L)
+                e_mask = (src_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
+
+                if t == 0:
+                    context = torch.zeros(src_input.shape[0], self.config['d_model']).to(self.config['device'])
+
+                src_emb = self.model.embedding(src_input)  # (B, L, d_model)
+                src_emb = self.model.positional_embedding(src_emb)  # (B, L, d_model)
+
+                e_output = self.model.encoder(src_emb, e_mask)  # (B, L, d_model)
+                e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, 2d_model)
+                e_output = self.model.linear1(e_output)  # (B, L, d_ff)
+                e_output = self.model.linear2(e_output)  # (B, L, d_model)
+
+                context = self.model.context_update(context, e_output)
+
+                if t % 2 == 0:
+                    output_ids = self.nucleus_sampling(e_output, e_mask)  # (L) list
+                    utter = self.tokenizer.DecodeIds(output_ids)
+
+                    print(f"Bot: {utter}")
+
+                if t == self.config['max_turn']-1:
+                    print("This is the last turn.")
+
+    def nucleus_sampling(self, e_output, e_mask):
+        trg_input = [self.config['bos_id']]
+        trg_input += [self.config['pad_id']] * (self.config['max_len']-len(trg_input))
+        trg_input = torch.LongTensor(trg_input).unsqueeze(0).to(self.config['device'])  # (B, L)
+        
+        output_ids = []
+        
+        for pos in range(self.config['max_len']):
+            d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
+            nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool).to(self.config['device'])  # (1, L, L)
+            nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
+            d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
+            
+            trg_emb = self.model.embedding(trg_input)  # (B, L, d_model)
+            trg_emb = self.model.positional_embedding(trg_emb)  # (B, L, d_model)
+            d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, d_model)
+            
+            output = F.softmax(self.model.output_linear(d_output), dim=-1)  # (B, L, vocab_size)
+            output = output[:,pos]  # (B, vocab_size)
+            
+            sorted_probs, sorted_idxs = torch.sort(output, descending=True)
+            cumsum_probs = torch.cumsum(sorted_probs, dim=-1)  # (B, vocab_size)
+            idx_remove = cumsum_probs > self.config['nucleus_p']
+            sorted_probs[idx_remove] = 1e-8
+            sorted_probs /= torch.sum(sorted_probs, dim=-1, keepdim=True)  # (B, vocab_size)
+            
+            
+            # Random sampling
+            seed = int(time.time())
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+            probs = torch.zeros(output.shape).to(self.config['device']).scatter_(-1, sorted_idxs, sorted_probs)  # (B, vocab_size)
+            idxs = torch.multinomial(probs, 1).squeeze(-1)  # (B)
+            
+            if pos < self.config['max_len']-1:
+                trg_input[:, pos+1] = idxs
+            
+            output_ids.append(idxs.squeeze(0).item())    
+            if idxs.squeeze(0).item() == self.config['eos_id']:
+                break
+            
+            del output, sorted_probs, sorted_idxs, cumsum_probs, idx_remove, probs, idxs
+            torch.cuda.empty_cache()
+            
+        if output_ids[-1]== self.config['eos_id']:
+            output_ids = output_ids[:-1]
+            
+        return output_ids
         
 
 if __name__=='__main__':
