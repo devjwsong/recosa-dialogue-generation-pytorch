@@ -1,1 +1,1 @@
-# gpt-2-multiturn-dialogue-pytorch
+# transformer-multiturn-dialogue-pytorch
