@@ -17,13 +17,15 @@ class Manager():
         print("Setting the configurations...")
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-            'learning_rate': 0.0001,
+            'learning_rate': 0.00001,
             'batch_size': 5,
             'epoch_num': 10,
             'max_len': 256,
             'head_num': 8,
             'layer_num': 6,
             'd_model': 512,
+            'hidden_size': 128,
+            'd_mid': 768,
             'd_ff': 2048,
             'drop_out_rate': 0.1,
             'max_turn': 35,
@@ -99,7 +101,7 @@ class Manager():
                 dialogue_losses = []
                 for t in range(self.config['max_turn']):
                     if t == 0:
-                        context = torch.zeros(src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
+                        context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
                       
                     if t < self.config['max_turn']-1:
                         src_input, trg_input, trg_output = \
@@ -160,7 +162,7 @@ class Manager():
                 dialogue_losses = []
                 for t in range(self.config['max_turn']):
                     if t == 0:
-                        context = torch.zeros(src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
+                        context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
                       
                     if t < self.config['max_turn']-1:
                         src_input, trg_input, trg_output = \
@@ -216,14 +218,14 @@ class Manager():
                 e_mask = (src_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
 
                 if t == 0:
-                    context = torch.zeros(src_input.shape[0], self.config['d_model']).to(self.config['device'])
+                    context = torch.zeros(src_input.shape[0], self.config['hidden_size']).to(self.config['device'])
 
                 src_emb = self.model.embedding(src_input)  # (B, L, d_model)
                 src_emb = self.model.positional_embedding(src_emb)  # (B, L, d_model)
 
                 e_output = self.model.encoder(src_emb, e_mask)  # (B, L, d_model)
-                e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, 2d_model)
-                e_output = self.model.linear1(e_output)  # (B, L, d_ff)
+                e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, d_model + d_h)
+                e_output = self.model.linear1(e_output)  # (B, L, d_mid)
                 e_output = self.model.linear2(e_output)  # (B, L, d_model)
 
                 context = self.model.context_update(context, e_output)

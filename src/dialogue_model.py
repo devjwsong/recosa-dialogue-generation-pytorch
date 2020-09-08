@@ -28,13 +28,13 @@ class DialogueModel(nn.Module):
         self.softmax = nn.LogSoftmax(dim=-1)
         
         # Context encoding
-        self.linear1 = nn.Linear(2*self.config['d_model'], self.config['d_ff'])
-        self.linear2 = nn.Linear(self.config['d_ff'], self.config['d_model'])
+        self.linear1 = nn.Linear(self.config['d_model'] + self.config['hidden_size'], self.config['d_mid'])
+        self.linear2 = nn.Linear(self.config['d_mid'], self.config['d_model'])
         
         # Context RNN
         self.context_rnn = nn.GRU(
             input_size=self.config['d_model'],
-            hidden_size=self.config['d_model'],
+            hidden_size=self.config['hidden_size'],
             num_layers=1,
             batch_first=True,
         )
@@ -56,8 +56,8 @@ class DialogueModel(nn.Module):
         e_output = self.encoder(src_emb, e_mask)  # (B, L, d_model)
         
         # Encoded input & context combination
-        e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, 2d_model)
-        e_output = self.linear1(e_output)  # (B, L, d_ff)
+        e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, d_model+d_h)
+        e_output = self.linear1(e_output)  # (B, L, d_mid)
         e_output = self.linear2(e_output)  # (B, L, d_model)
         
         # Decoding phase
