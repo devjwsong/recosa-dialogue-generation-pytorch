@@ -138,7 +138,7 @@ class Manager():
                 state_dict = {
                     'model_state_dict': self.model.state_dict(),
                     'optim_state_dict': self.optim.state_dict(),
-                    'loss': mean_train_loss
+                    'loss': self.best_loss
                 }
               
                 torch.save(state_dict, f"{self.config['ckpt_dir']}/best_ckpt.tar")
