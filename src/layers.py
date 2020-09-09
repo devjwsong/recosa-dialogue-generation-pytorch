@@ -5,20 +5,20 @@ import math
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model, d_ff, head_num, drop_out_rate):
+    def __init__(self, d_model, d_ff, num_heads, dropout):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.head_num = head_num
-        self.drop_out_rate = drop_out_rate
+        self.num_heads = num_heads
+        self.dropout = dropout
         
         self.layer_norm_1 = LayerNormalization(self.d_model)
-        self.multihead_attention = MultiheadAttention(self.d_model, self.head_num, self.drop_out_rate)
-        self.drop_out_1 = nn.Dropout(self.drop_out_rate)
+        self.multihead_attention = MultiheadAttention(self.d_model, self.num_heads, self.dropout)
+        self.drop_out_1 = nn.Dropout(self.dropout)
 
         self.layer_norm_2 = LayerNormalization(self.d_model)
-        self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.drop_out_rate)
-        self.drop_out_2 = nn.Dropout(self.drop_out_rate)
+        self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.dropout)
+        self.drop_out_2 = nn.Dropout(self.dropout)
 
     def forward(self, x, e_mask):
         x_1 = self.layer_norm_1(x) # (B, L, d_model)
@@ -32,24 +32,24 @@ class EncoderLayer(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model, d_ff, head_num, drop_out_rate):
+    def __init__(self, d_model, d_ff, num_heads, dropout):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.head_num = head_num
-        self.drop_out_rate = drop_out_rate
+        self.num_heads = num_heads
+        self.dropout = dropout
         
         self.layer_norm_1 = LayerNormalization(self.d_model)
-        self.masked_multihead_attention = MultiheadAttention(self.d_model, self.head_num, self.drop_out_rate)
-        self.drop_out_1 = nn.Dropout(self.drop_out_rate)
+        self.masked_multihead_attention = MultiheadAttention(self.d_model, self.num_heads, self.dropout)
+        self.drop_out_1 = nn.Dropout(self.dropout)
 
         self.layer_norm_2 = LayerNormalization(self.d_model)
-        self.multihead_attention = MultiheadAttention(self.d_model, self.head_num, self.drop_out_rate)
-        self.drop_out_2 = nn.Dropout(self.drop_out_rate)
+        self.multihead_attention = MultiheadAttention(self.d_model, self.num_heads, self.dropout)
+        self.drop_out_2 = nn.Dropout(self.dropout)
 
         self.layer_norm_3 = LayerNormalization(self.d_model)
-        self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.drop_out_rate)
-        self.drop_out_3 = nn.Dropout(self.drop_out_rate)
+        self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.dropout)
+        self.drop_out_3 = nn.Dropout(self.dropout)
 
     def forward(self, x, e_output, e_mask,  d_mask):
         x_1 = self.layer_norm_1(x) # (B, L, d_model)
@@ -67,19 +67,19 @@ class DecoderLayer(nn.Module):
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, d_model, head_num, drop_out_rate):
+    def __init__(self, d_model, num_heads, dropout):
         super().__init__()
         self.inf = 1e9
         self.d_model = d_model
-        self.head_num = head_num
-        self.d_k = d_model // head_num
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
 
         # W^Q, W^K, W^V in the paper
         self.w_q = nn.Linear(d_model, d_model)
         self.w_k = nn.Linear(d_model, d_model)
         self.w_v = nn.Linear(d_model, d_model)
 
-        self.dropout = nn.Dropout(drop_out_rate)
+        self.dropout = nn.Dropout(dropout)
         self.attn_softmax = nn.Softmax(dim=-1)
 
         # Final output linear transformation
@@ -88,10 +88,10 @@ class MultiheadAttention(nn.Module):
     def forward(self, q, k, v, mask=None):
         input_shape = q.shape
 
-        # Linear calculation +  split into head_num
-        q = self.w_q(q).view(input_shape[0], -1, self.head_num, self.d_k) # (B, L, H, d_k)
-        k = self.w_k(k).view(input_shape[0], -1, self.head_num, self.d_k) # (B, L, H, d_k)
-        v = self.w_v(v).view(input_shape[0], -1, self.head_num, self.d_k) # (B, L, H, d_k)
+        # Linear calculation +  split into num_heads
+        q = self.w_q(q).view(input_shape[0], -1, self.num_heads, self.d_k) # (B, L, H, d_k)
+        k = self.w_k(k).view(input_shape[0], -1, self.num_heads, self.d_k) # (B, L, H, d_k)
+        v = self.w_v(v).view(input_shape[0], -1, self.num_heads, self.d_k) # (B, L, H, d_k)
 
         # For convenience, convert all tensors in size (B, H, L, d_k)
         q = q.transpose(1, 2)
@@ -125,16 +125,16 @@ class MultiheadAttention(nn.Module):
 
 
 class FeedFowardLayer(nn.Module):
-    def __init__(self, d_model, d_ff, drop_out_rate):
+    def __init__(self, d_model, d_ff, dropout):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.drop_out_rate = drop_out_rate
+        self.dropout = dropout
         
         self.linear_1 = nn.Linear(self.d_model, self.d_ff, bias=True)
         self.relu = nn.ReLU()
         self.linear_2 = nn.Linear(self.d_ff, self.d_model, bias=True)
-        self.dropout = nn.Dropout(self.drop_out_rate)
+        self.dropout = nn.Dropout(self.dropout)
 
     def forward(self, x):
         x = self.relu(self.linear_1(x)) # (B, L, d_ff)
@@ -158,28 +158,33 @@ class LayerNormalization(nn.Module):
 
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, max_len, d_model, device):
+    def __init__(self, max_len, p_dim, device):
         super().__init__()
         self.device = device
         self.max_len = max_len
-        self.d_model = d_model
+        self.p_dim = p_dim
         
         # Make initial positional encoding matrix with 0
-        pe_matrix= torch.zeros(self.max_len, self.d_model) # (L, d_model)
+        pe_matrix= torch.zeros(self.max_len, self.p_dim) # (L, d_model)
 
         # Calculating position encoding values
         for pos in range(self.max_len):
-            for i in range(self.d_model):
+            for i in range(self.p_dim):
                 if i % 2 == 0:
-                    pe_matrix[pos, i] = math.sin(pos / (10000 ** (2 * i / self.d_model)))
+                    pe_matrix[pos, i] = math.sin(pos / (10000 ** (2 * i / self.p_dim)))
                 elif i % 2 == 1:
-                    pe_matrix[pos, i] = math.cos(pos / (10000 ** (2 * i / self.d_model)))
+                    pe_matrix[pos, i] = math.cos(pos / (10000 ** (2 * i / self.p_dim)))
 
-        pe_matrix = pe_matrix.unsqueeze(0) # (1, L, d_model)
+        pe_matrix = pe_matrix.unsqueeze(0) # (1, L, p_dim)
         self.positional_encoding = pe_matrix.to(self.device).requires_grad_(False)
 
-    def forward(self, x):
-        x = x * math.sqrt(self.d_model) # (B, L, d_model)
-        x = x + self.positional_encoding # (B, L, d_model)
+    def forward(self, x, cal='add'):
+        assert cal == 'add' or cal == 'concat', "Please specify the calculation method, either 'add' or 'concat'."
+        
+        if cal == 'add':
+            x = x * math.sqrt(self.dim) # (B, L, d_model)
+            x = x + self.positional_encoding # (B, L, d_model)
+        elif cal == 'add':
+            x = torch.cat((x, self.positional_encoding.repeat(x.shape[0],1,1)), dim=-1)  # (B, T, d_model+p_dim)
 
         return x

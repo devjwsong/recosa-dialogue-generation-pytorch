@@ -1,12 +1,13 @@
-from layers import *
 from torch import nn
+from layers import *
 
 import torch
+import math
 import numpy as np
 import random
 
 
-class DialogueModel(nn.Module):
+class GRUTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
         
@@ -21,8 +22,8 @@ class DialogueModel(nn.Module):
         # Transformer components
         self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
         self.positional_embedding = PositionalEncoder(self.config['max_len'], self.config['d_model'], self.config['device'])
-        self.encoder = Encoder(self.config['d_model'], self.config['d_ff'], self.config['head_num'], self.config['drop_out_rate'], self.config['layer_num'])
-        self.decoder = Decoder(self.config['d_model'], self.config['d_ff'], self.config['head_num'], self.config['drop_out_rate'], self.config['layer_num'])
+        self.encoder = Encoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['num_layers'])
+        self.decoder = Decoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['num_layers'])
         
         self.output_linear = nn.Linear(self.config['d_model'], self.config['vocab_size'])
         self.softmax = nn.LogSoftmax(dim=-1)
@@ -35,7 +36,8 @@ class DialogueModel(nn.Module):
         self.context_rnn = nn.GRU(
             input_size=self.config['d_model'],
             hidden_size=self.config['hidden_size'],
-            num_layers=1,
+            num_layers=self.config['gru_num_layers'],
+            dropout=self.config['gru_dropout'],
             batch_first=True,
         )
     
@@ -48,9 +50,9 @@ class DialogueModel(nn.Module):
     def forward(self, src_input, trg_input, e_mask, d_mask, context):
         # Embeddings
         src_emb = self.embedding(src_input)  # (B, L, d_model)
-        src_emb = self.positional_embedding(src_emb)  # (B, L, d_model)
+        src_emb = self.positional_embedding(src_emb, cal='add')  # (B, L, d_model)
         trg_emb = self.embedding(trg_input)  # (B, L, d_model)
-        trg_emb = self.positional_embedding(trg_emb)  # (B, L, d_model)
+        trg_emb = self.positional_embedding(trg_emb, cal='add')  # (B, L, d_model)
         
         # Encoding phase
         e_output = self.encoder(src_emb, e_mask)  # (B, L, d_model)
@@ -90,38 +92,38 @@ class DialogueModel(nn.Module):
 
     
 class Encoder(nn.Module):
-    def __init__(self, d_model, d_ff, head_num, drop_out_rate, layer_num):
+    def __init__(self, d_model, d_ff, num_heads, dropout, num_layers):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.head_num = head_num
-        self.drop_out_rate = drop_out_rate
-        self.layer_num = layer_num
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.num_layers = num_layers
         
-        self.layers = nn.ModuleList([EncoderLayer(self.d_model, self.d_ff, self.head_num, self.drop_out_rate) for i in range(self.layer_num)])
+        self.layers = nn.ModuleList([EncoderLayer(self.d_model, self.d_ff, self.num_heads, self.dropout) for i in range(self.num_layers)])
         self.layer_norm = LayerNormalization(self.d_model)
 
     def forward(self, x, e_mask):
-        for i in range(self.layer_num):
+        for i in range(self.num_layers):
             x = self.layers[i](x, e_mask)
 
         return self.layer_norm(x)
 
 
 class Decoder(nn.Module):
-    def __init__(self, d_model, d_ff, head_num, drop_out_rate, layer_num):
+    def __init__(self, d_model, d_ff, num_heads, dropout, num_layers):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.head_num = head_num
-        self.drop_out_rate = drop_out_rate
-        self.layer_num = layer_num
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.num_layers = num_layers
         
-        self.layers = nn.ModuleList([DecoderLayer(self.d_model, self.d_ff, self.head_num, self.drop_out_rate) for i in range(self.layer_num)])
+        self.layers = nn.ModuleList([DecoderLayer(self.d_model, self.d_ff, self.num_heads, self.dropout) for i in range(self.num_layers)])
         self.layer_norm = LayerNormalization(self.d_model)
 
     def forward(self, x, e_output, e_mask, d_mask):
-        for i in range(self.layer_num):
+        for i in range(self.num_layers):
             x = self.layers[i](x, e_output, e_mask, d_mask)
 
         return self.layer_norm(x)    

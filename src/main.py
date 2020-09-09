@@ -1,4 +1,4 @@
-from dialogue_model import *
+from gru_transformer import *
 from custom_data import *
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -13,21 +13,22 @@ import time
 
 
 class Manager():
-    def __init__(self, mode, ckpt_name=None):
+    def __init__(self, mode, model_type, ckpt_name=None):
         print("Setting the configurations...")
         self.config = {
+            'model_type': model_type,
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'learning_rate': 0.00001,
             'batch_size': 5,
-            'epoch_num': 10,
+            'num_epochs': 10,
             'max_len': 256,
-            'head_num': 8,
-            'layer_num': 6,
+            'num_heads': 8,
+            'encoder_num_layers': 6,
+            'decoder_num_layers': 6,
             'd_model': 512,
-            'hidden_size': 128,
             'd_mid': 768,
             'd_ff': 2048,
-            'drop_out_rate': 0.1,
+            'dropout': 0.1,
             'max_turn': 35,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',
@@ -44,6 +45,9 @@ class Manager():
             'dialogue_split_line': '[END OF DIALOGUE]',
             'end_command': 'abort!'
         }
+        self.config['gru_num_layers'] = 1 if self.config['model_type']=='gru' else 2
+        self.config['hidden_size'] = 128 if self.config['model_type']=='gru' else self.config['d_model']
+        self.config['gru_dropout'] = 0.0 if self.config['model_type']=='gru' else 0.3
         
         # Sentencepiece tokenizer & vocab
         self.tokenizer = spm.SentencePieceProcessor()
@@ -54,7 +58,7 @@ class Manager():
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
-        self.model = DialogueModel(self.config).to(self.config['device'])
+        self.model = GRUTransformer(self.config).to(self.config['device'])
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.config['learning_rate'])
         self.best_loss = sys.float_info.max
         
@@ -90,7 +94,7 @@ class Manager():
     def train(self):
         print("Training starts.")
               
-        for epoch in range(1, self.config['epoch_num']+1):
+        for epoch in range(1, self.config['num_epochs']+1):
             self.model.train()
             
             print(f"#################### Epoch: {epoch} ####################")
@@ -221,7 +225,7 @@ class Manager():
                     context = torch.zeros(src_input.shape[0], self.config['hidden_size']).to(self.config['device'])
 
                 src_emb = self.model.embedding(src_input)  # (B, L, d_model)
-                src_emb = self.model.positional_embedding(src_emb)  # (B, L, d_model)
+                src_emb = self.model.positional_embedding(src_emb, cal='add')  # (B, L, d_model)
 
                 e_output = self.model.encoder(src_emb, e_mask)  # (B, L, d_model)
                 e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, d_model + d_h)
@@ -253,7 +257,7 @@ class Manager():
             d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
             
             trg_emb = self.model.embedding(trg_input)  # (B, L, d_model)
-            trg_emb = self.model.positional_embedding(trg_emb)  # (B, L, d_model)
+            trg_emb = self.model.positional_embedding(trg_emb, cal='add')  # (B, L, d_model)
             d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, d_model)
             
             output = F.softmax(self.model.output_linear(d_output), dim=-1)  # (B, L, vocab_size)
