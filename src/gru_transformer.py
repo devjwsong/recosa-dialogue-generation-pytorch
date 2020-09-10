@@ -48,40 +48,54 @@ class GRUTransformer(nn.Module):
                 nn.init.xavier_uniform_(param)
             
     def forward(self, src_input, trg_input, e_mask, d_mask, context):
-        # Embeddings
-        src_emb = self.embedding(src_input)  # (B, L, d_model)
-        src_emb = self.positional_embedding(src_emb, cal='add')  # (B, L, d_model)
-        trg_emb = self.embedding(trg_input)  # (B, L, d_model)
-        trg_emb = self.positional_embedding(trg_emb, cal='add')  # (B, L, d_model)
+        # Embeddings & Masking
+        src_emb = self.embed(src_input)  # (B, L, d_model)
+        trg_emb = self.embed(trg_input)  # (B, L, d_model)
+        e_mask = self.make_encoder_mask(src_input)  # (B, 1, L)
+        d_mask = self.make_encoder_mask(trg_input)  # (B, L, L)
         
         # Encoding phase
         e_output = self.encoder(src_emb, e_mask)  # (B, L, d_model)
         
-        # Encoded input & context combination
-        e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, d_model+d_h)
-        e_output = self.linear1(e_output)  # (B, L, d_mid)
-        e_output = self.linear2(e_output)  # (B, L, d_model)
+        # Context update
+        next_context = self.context_update(context, e_output)  # (B, d_model)
         
         # Decoding phase
+        e_output = self.combine_context(e_output, context)  # (B, L, d_model)
         d_output = self.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, d_model)
         
         output = self.softmax(self.output_linear(d_output))  # (B, L, vocab_size)
         
-        # Context update
-        next_context = self.context_update(context, e_output)  # (B, d_model)
+        del e_mask, d_mask
         
         return output, next_context  # (B, L, vocab_size), (B, d_model)
         
-    
-    def make_mask(self, src_input, trg_input):
+    def make_encoder_mask(self, src_input):
         e_mask = (src_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
+        
+        return e_mask
+    
+    def make_decoder_mask(self, trg_input):
         d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
 
         nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool).to(self.config['device'])  # (1, L, L)
         nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
         d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
-
-        return e_mask, d_mask
+        
+        return d_mask
+    
+    def embed(self, input_x):
+        x_emb = self.embedding(input_x)  # (B, L, d_model)
+        x_emb = self.positional_embedding(x_emb, cal='add')  # (B, L, d_model)
+    
+        return x_emb
+    
+    def combine_context(self, e_output, context):
+        e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, d_model+d_h)
+        e_output = self.linear1(e_output)  # (B, L, d_mid)
+        e_output = self.linear2(e_output)  # (B, L, d_model)
+        
+        return e_output
     
     def context_update(self, prev_context, e_output):
         cur_context = torch.max(e_output, dim=1).values.unsqueeze(1)  # (B, 1, d_model)

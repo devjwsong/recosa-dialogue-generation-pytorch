@@ -10,6 +10,7 @@ import numpy as np
 import argparse
 import sentencepiece as spm
 import time
+import copy
 
 
 class Manager():
@@ -58,7 +59,10 @@ class Manager():
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
-        self.model = GRUTransformer(self.config).to(self.config['device'])
+        if self.config['model_type'] == 'gru':
+            self.model = GRUTransformer(self.config).to(self.config['device'])
+        elif self.config['model_type'] == 'recosa':
+            self.model = ReCoSaTransformer(self.config).to(self.config['device'])
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.config['learning_rate'])
         self.best_loss = sys.float_info.max
         
@@ -103,18 +107,23 @@ class Manager():
                 src_inputs, trg_inputs, trg_outputs = batch[:, :, 0], batch[:, :, 1], batch[:, :, 2]  # (B, T, L)
               
                 dialogue_losses = []
+                
+                # Only used for context GRU.
+                context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
+                # Only used for ReCoSa.
+                hists = torch.zeros(self.config['max_turn'], src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
                 for t in range(self.config['max_turn']):
-                    if t == 0:
-                        context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
-                      
                     if t < self.config['max_turn']-1:
                         src_input, trg_input, trg_output = \
                             src_inputs[:, t].to(self.config['device']), \
                             trg_inputs[:, t].to(self.config['device']), \
                             trg_outputs[: ,t].to(self.config['device'])  # (B, L)
-                        e_mask, d_mask = self.model.make_mask(src_input, trg_input)  # (B, 1, L), (B, L, L)
-                        
-                        output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
+                    
+                        if self.config['model_type'] == 'gru':                              
+                            output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
+                            
+                        elif self.config['model_type'] == 'recosa':
+                            output, hists = self.model(src_input, trg_input, hists, num_turn=t)  # (B, L, vocab_size), (T, B, d_model)
                         
                         self.optim.zero_grad()
               
@@ -128,7 +137,7 @@ class Manager():
               
                         dialogue_losses.append(loss.item())
                 
-                        del src_input, trg_input, trg_output, e_mask, d_mask
+                        del src_input, trg_input, trg_output
                         torch.cuda.empty_cache()
                 
                 train_losses += dialogue_losses
@@ -164,18 +173,22 @@ class Manager():
                 src_inputs, trg_inputs, trg_outputs = batch[:, :, 0], batch[:, :, 1], batch[:, :, 2]  # (B, T, L)
               
                 dialogue_losses = []
+                # Only used for context GRU.
+                context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
+                # Only used for ReCoSa.
+                hists = torch.zeros(self.config['max_turn'], src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
                 for t in range(self.config['max_turn']):
-                    if t == 0:
-                        context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
-                      
                     if t < self.config['max_turn']-1:
                         src_input, trg_input, trg_output = \
                             src_inputs[:, t].to(self.config['device']), \
                             trg_inputs[:, t].to(self.config['device']), \
                             trg_outputs[: ,t].to(self.config['device'])  # (B, L)
-                        e_mask, d_mask = self.model.make_mask(src_input, trg_input)  # (B, 1, L), (B, L, L)
-                        
-                        output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
+                    
+                        if self.config['model_type'] == 'gru':                              
+                            output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
+                            
+                        elif self.config['model_type'] == 'recosa':
+                            output, hists = self.model(src_input, trg_input, hists, num_turn=t)  # (B, L, vocab_size), (T, B, d_model)
               
                         loss = self.criterion(
                             output.view(-1, self.config['vocab_size']),
@@ -184,7 +197,7 @@ class Manager():
               
                         dialogue_losses.append(loss.item())
                 
-                        del src_input, trg_input, trg_output, e_mask, d_mask
+                        del src_input, trg_input, trg_output
                         torch.cuda.empty_cache()
                     
                 valid_losses += dialogue_losses
@@ -201,7 +214,12 @@ class Manager():
         
         with torch.no_grad():
             utter = None
-            context = None
+            
+            # Only used for context GRU.
+            context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
+            # Only used for ReCoSa.
+            hists = torch.zeros(self.config['max_turn'], src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
+            
             for t in range(self.config['max_turn']):
                 if t % 2 == 0:
                     utter = input("You: ")
@@ -219,20 +237,18 @@ class Manager():
                     src_input[-1] = self.config['eos_id']
 
                 src_input = torch.LongTensor(src_input).unsqueeze(0).to(self.config['device'])  # (B, L)
-                e_mask = (src_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
-
-                if t == 0:
-                    context = torch.zeros(src_input.shape[0], self.config['hidden_size']).to(self.config['device'])
-
-                src_emb = self.model.embedding(src_input)  # (B, L, d_model)
-                src_emb = self.model.positional_embedding(src_emb, cal='add')  # (B, L, d_model)
-
-                e_output = self.model.encoder(src_emb, e_mask)  # (B, L, d_model)
-                e_output = torch.cat((e_output, context.unsqueeze(1).repeat(1,self.config['max_len'],1)), dim=-1)  # (B, L, d_model + d_h)
-                e_output = self.model.linear1(e_output)  # (B, L, d_mid)
-                e_output = self.model.linear2(e_output)  # (B, L, d_model)
-
-                context = self.model.context_update(context, e_output)
+                
+                if self.config['model_type'] == 'gru':
+                    src_emb = self.model.embed(src_input)  # (B, L, d_model)
+                    e_mask = self.model.make_encoder_mask(src_input)  # (B, 1, L)
+                    e_output = self.model.encoder(src_emb, e_mask)  # (B, L, d_model)
+                    next_context = self.context_update(context, e_output)  # (B, d_model)
+                    e_output = self.combine_context(e_output, context)  # (B, L, d_model)
+                    context = next_context.clone()
+                elif self.config['model_type'] == 'recosa':
+                    src_emb, hists = self.model.src_embed(hists, src_input)  # (B, L, d_model), (T, B, d_model)
+                    e_mask = self.model.make_encoder_mask(t, src_input)  # (B, 1, L)
+                    e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 
                 if t % 2 == 0:
                     output_ids = self.nucleus_sampling(e_output, e_mask)  # (L) list
@@ -251,14 +267,12 @@ class Manager():
         output_ids = []
         
         for pos in range(self.config['max_len']):
-            d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
-            nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool).to(self.config['device'])  # (1, L, L)
-            nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
-            d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
-            
-            trg_emb = self.model.embedding(trg_input)  # (B, L, d_model)
-            trg_emb = self.model.positional_embedding(trg_emb, cal='add')  # (B, L, d_model)
-            d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, d_model)
+            if self.config['model_type'] == 'gru':
+                trg_emb = self.model.embed(trg_input)  # (B, L, d_model)
+            elif self.config['model_type'] == 'recosa':
+                trg_emb = self.model.trg_embed(trg_input)  # (B, L, 2*d_model)
+            d_mask = self.model.make_decoder_mask(trg_input)  # (B, L, L)
+            d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, d_model) or (B, L, 2*d_model)
             
             output = F.softmax(self.model.output_linear(d_output), dim=-1)  # (B, L, vocab_size)
             output = output[:,pos]  # (B, vocab_size)
@@ -268,7 +282,6 @@ class Manager():
             idx_remove = cumsum_probs > self.config['nucleus_p']
             sorted_probs[idx_remove] = 1e-8
             sorted_probs /= torch.sum(sorted_probs, dim=-1, keepdim=True)  # (B, vocab_size)
-            
             
             # Random sampling
             seed = int(time.time())
@@ -295,22 +308,26 @@ class Manager():
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', required=True, help="train or test?")
-    parser.add_argument('--ckpt_name', required=False, help="best checkpoint file")
+    parser.add_argument('--mode', required=True, help="Train or test?")
+    parser.add_argument('--model_type', required=True, help="Context history method.")
+    parser.add_argument('--ckpt_name', required=False, help="Best checkpoint file.")
               
     args = parser.parse_args()
+    
+    assert args.mode == 'train' or args.mode=='test', print("Please specify a correct mode name, 'train' or 'test'.")
+    assert args.model_type == 'gru' or args.model_type=='recosa', print("Please specify a correct model type, 'gru' or 'recosa'.")
               
     if args.mode == 'train':
         if args.ckpt_name is not None:
-            manager = Manager(args.mode, ckpt_name=args.ckpt_name)
+            manager = Manager(args.mode, args.model_type, ckpt_name=args.ckpt_name)
         else:
-            manager = Manager(args.mode)
+            manager = Manager(args.mode, args.model_type)
               
         manager.train()
         
     elif args.mode == 'test':
         assert args.ckpt_name is not None, "Please specify the trained model checkpoint."
         
-        manager = Manager(args.mode, ckpt_name=args.ckpt_name)
+        manager = Manager(args.mode, args.model_type, ckpt_name=args.ckpt_name)
         
         manager.test()

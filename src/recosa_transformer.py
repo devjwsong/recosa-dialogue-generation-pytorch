@@ -63,7 +63,8 @@ class ReCoSaTransformer(nn.Module):
         # Embeddings & Masking
         src_emb, hists = self.src_embed(hists, src_input)  # (B, T, 2*d_model), (T, B, d_model)
         trg_emb = self.trg_embed(trg_input)  # (B, L, 2*d_model)
-        e_mask, d_mask = self.make_mask(num_turn, src_input, trg_input)  # (B, 1, T), (B, L, L)
+        e_mask = self.make_encoder_mask(num_turn, src_input)  # (B, 1, T)
+        d_mask = self.make_decoder_mask(trg_input)  # (B, L, L)
         
         # Encoding phase
         e_output = self.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
@@ -73,19 +74,24 @@ class ReCoSaTransformer(nn.Module):
         
         output = self.softmax(self.output_linear(d_output))  # (B, L, vocab_size)
         
+        del e_mask, d_mask
+        
         return output, hists  # (B, L, vocab_size), (T, B, d_model)
         
-    
-    def make_mask(self, num_turn, src_input, trg_input):
+    def make_encoder_mask(self, num_turn, src_input):
         e_mask = torch.BoolTensor([1 for i in range(num_turn+1)] + [0 for i in range(self.config['max_turn']-num_turn-1)])
         e_mask = e_mask.unsqueeze(-1).repeat(1, src_input.shape[0]).transpose(0, 1).unsqueeze(1)  # (B, 1, T)
+        
+        return e_mask
+    
+    def make_decoder_mask(self, trg_input):
         d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
 
         nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool).to(self.config['device'])  # (1, L, L)
         nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
         d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
-
-        return e_mask, d_mask
+        
+        return d_mask
     
     def src_embed(self, hists, src_input):
         src_emb = self.embedding(src_input)  # (B, L, d_model)
