@@ -22,8 +22,8 @@ class GRUTransformer(nn.Module):
         # Transformer components
         self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
         self.positional_embedding = PositionalEncoder(self.config['max_len'], self.config['d_model'], self.config['device'])
-        self.encoder = Encoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['num_layers'])
-        self.decoder = Decoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['num_layers'])
+        self.encoder = Encoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['encoder_num_layers'])
+        self.decoder = Decoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['decoder_num_layers'])
         
         self.output_linear = nn.Linear(self.config['d_model'], self.config['vocab_size'])
         self.softmax = nn.LogSoftmax(dim=-1)
@@ -47,7 +47,7 @@ class GRUTransformer(nn.Module):
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
             
-    def forward(self, src_input, trg_input, e_mask, d_mask, context):
+    def forward(self, src_input, trg_input, context):
         # Embeddings & Masking
         src_emb = self.embed(src_input)  # (B, L, d_model)
         trg_emb = self.embed(trg_input)  # (B, L, d_model)

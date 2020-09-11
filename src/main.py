@@ -1,4 +1,5 @@
 from gru_transformer import *
+from recosa_transformer import *
 from custom_data import *
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -120,7 +121,7 @@ class Manager():
                             trg_outputs[: ,t].to(self.config['device'])  # (B, L)
                     
                         if self.config['model_type'] == 'gru':                              
-                            output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
+                            output, context = self.model(src_input, trg_input, context)  # (B, L, vocab_size), (B, d_h)
                             
                         elif self.config['model_type'] == 'recosa':
                             output, hists = self.model(src_input, trg_input, hists, num_turn=t)  # (B, L, vocab_size), (T, B, d_model)
@@ -185,7 +186,7 @@ class Manager():
                             trg_outputs[: ,t].to(self.config['device'])  # (B, L)
                     
                         if self.config['model_type'] == 'gru':                              
-                            output, context = self.model(src_input, trg_input, e_mask, d_mask, context)  # (B, L, vocab_size), (B, d_h)
+                            output, context = self.model(src_input, trg_input, context)  # (B, L, vocab_size), (B, d_h)
                             
                         elif self.config['model_type'] == 'recosa':
                             output, hists = self.model(src_input, trg_input, hists, num_turn=t)  # (B, L, vocab_size), (T, B, d_model)
@@ -246,7 +247,7 @@ class Manager():
                     e_output = self.combine_context(e_output, context)  # (B, L, d_model)
                     context = next_context.clone()
                 elif self.config['model_type'] == 'recosa':
-                    src_emb, hists = self.model.src_embed(hists, src_input)  # (B, L, d_model), (T, B, d_model)
+                    src_emb, hists = self.model.src_embed(src_input, hists, num_turn)  # (B, L, d_model), (T, B, d_model)
                     e_mask = self.model.make_encoder_mask(t, src_input)  # (B, 1, L)
                     e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 

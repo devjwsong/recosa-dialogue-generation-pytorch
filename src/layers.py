@@ -182,9 +182,9 @@ class PositionalEncoder(nn.Module):
         assert cal == 'add' or cal == 'concat', "Please specify the calculation method, either 'add' or 'concat'."
         
         if cal == 'add':
-            x = x * math.sqrt(self.dim) # (B, L, d_model)
+            x = x * math.sqrt(self.p_dim) # (B, L, d_model)
             x = x + self.positional_encoding # (B, L, d_model)
-        elif cal == 'add':
+        elif cal == 'concat':
             x = torch.cat((x, self.positional_encoding.repeat(x.shape[0],1,1)), dim=-1)  # (B, T, d_model+p_dim)
 
         return x

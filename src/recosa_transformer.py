@@ -61,7 +61,7 @@ class ReCoSaTransformer(nn.Module):
             
     def forward(self, src_input, trg_input, hists, num_turn):
         # Embeddings & Masking
-        src_emb, hists = self.src_embed(hists, src_input)  # (B, T, 2*d_model), (T, B, d_model)
+        src_emb, hists = self.src_embed(src_input, hists, num_turn)  # (B, T, 2*d_model), (T, B, d_model)
         trg_emb = self.trg_embed(trg_input)  # (B, L, 2*d_model)
         e_mask = self.make_encoder_mask(num_turn, src_input)  # (B, 1, T)
         d_mask = self.make_decoder_mask(trg_input)  # (B, L, L)
@@ -79,7 +79,7 @@ class ReCoSaTransformer(nn.Module):
         return output, hists  # (B, L, vocab_size), (T, B, d_model)
         
     def make_encoder_mask(self, num_turn, src_input):
-        e_mask = torch.BoolTensor([1 for i in range(num_turn+1)] + [0 for i in range(self.config['max_turn']-num_turn-1)])
+        e_mask = torch.BoolTensor([1 for i in range(num_turn+1)] + [0 for i in range(self.config['max_turn']-num_turn-1)]).to(self.config['device'])
         e_mask = e_mask.unsqueeze(-1).repeat(1, src_input.shape[0]).transpose(0, 1).unsqueeze(1)  # (B, 1, T)
         
         return e_mask
@@ -93,19 +93,19 @@ class ReCoSaTransformer(nn.Module):
         
         return d_mask
     
-    def src_embed(self, hists, src_input):
+    def src_embed(self, src_input, hists, num_turn):
         src_emb = self.embedding(src_input)  # (B, L, d_model)
         last_hist = self.word_level_rnn(src_emb)[1][-1]  # (B, d_model)
 
         hists[num_turn] = last_hist  # (T, B, d_model)
         src_emb = hists.transpose(0, 1)  # (B, T, d_model)
-        src_emb = self.positional_embedding(src_emb, cal='concat')  # (B, T, 2*d_model)
+        src_emb = self.turn_pembedding(src_emb, cal='concat')  # (B, T, 2*d_model)
         
         return src_emb, hists  # (B, T, 2*d_model), (T, B, d_model)
     
     def trg_embed(self, trg_input):
         trg_emb = self.embedding(trg_input)  # (B, L, d_model)
-        trg_emb = self.positional_embedding(trg_emb, cal='concat')  # (B, L, 2*d_model)
+        trg_emb = self.word_pembedding(trg_emb, cal='concat')  # (B, L, 2*d_model)
         
         return trg_emb  # (B, L, 2*d_model)
 
