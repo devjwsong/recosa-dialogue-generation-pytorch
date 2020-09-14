@@ -20,8 +20,8 @@ class Manager():
         self.config = {
             'model_type': model_type,
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-            'learning_rate': 0.00001,
-            'batch_size': 5,
+            'learning_rate': 0.0001,
+            'batch_size': 24,
             'num_epochs': 10,
             'max_len': 256,
             'num_heads': 8,
@@ -217,9 +217,9 @@ class Manager():
             utter = None
             
             # Only used for context GRU.
-            context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
+            context = torch.zeros(self.config['hidden_size']).unsqueeze(0).to(self.config['device'])
             # Only used for ReCoSa.
-            hists = torch.zeros(self.config['max_turn'], src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
+            hists = torch.zeros(self.config['max_turn'], self.config['d_model']).unsqueeze(1).to(self.config['device'])
             
             for t in range(self.config['max_turn']):
                 if t % 2 == 0:
@@ -247,7 +247,7 @@ class Manager():
                     e_output = self.combine_context(e_output, context)  # (B, L, d_model)
                     context = next_context.clone()
                 elif self.config['model_type'] == 'recosa':
-                    src_emb, hists = self.model.src_embed(src_input, hists, num_turn)  # (B, L, d_model), (T, B, d_model)
+                    src_emb, hists = self.model.src_embed(src_input, hists, t)  # (B, L, d_model), (T, B, d_model)
                     e_mask = self.model.make_encoder_mask(t, src_input)  # (B, 1, L)
                     e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 
