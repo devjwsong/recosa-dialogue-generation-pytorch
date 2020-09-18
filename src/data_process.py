@@ -1,8 +1,8 @@
 from tqdm import tqdm
+from transformers import *
 
 import torch
 import os
-import sentencepiece as spm
 
 
 # Parameters for data
@@ -15,9 +15,13 @@ train_name = 'train'
 valid_name = 'validation'
 test_name = 'test'
 raw_name_prefix = 'dialogues'
-train_frac = 0.8
+train_frac = 0.85
+space = 'Ġ'
 pad = '<pad>'
-space = '\u2581'
+unk = '<unk>'
+bos = '<bos>'
+eos = '<eos>'
+pre_quote = '’'
 end_of_utterance = '__eou__'
 end_marks = ['.', ',', '?', '!', '...']
 quotes = ['"', '\'']
@@ -58,6 +62,8 @@ def process_token_list(token_list):
                 token_list[i] = token[1:]
                 quote_count = 0
             else:
+                if i<len(token_list)-1 and token_list[i+1][0] == space:
+                    token_list[i+1] = token_list[i+1][1:]
                 quote_count += 1
                 
         if token in end_marks or token[1:] in end_marks:
@@ -65,7 +71,7 @@ def process_token_list(token_list):
                 if token_list[i+1][0] != space:
                     token_list[i+1] = space + token_list[i+1]
                 
-    new_token_list = [token for token in token_list if token != space]
+    new_token_list = [token for token in token_list if token != space and len(token)>0]
         
     return new_token_list
 
@@ -82,13 +88,14 @@ def save_data(lines, tokenizer, name):
         dialogue_ids = []
         
         for utter in utters:
-            token_list = tokenizer.EncodeAsPieces(utter)
+            utter = utter.replace(pre_quote, quotes[1])
+            token_list = tokenizer.tokenize(utter)
             token_list = process_token_list(token_list)
             
-            text = tokenizer.DecodePieces(token_list)
+            text = tokenizer.convert_tokens_to_string(token_list)
             texts.append(text)
             
-            token_ids = tokenizer.EncodeAsIds(text)
+            token_ids = tokenizer(text)['input_ids']
             dialogue_ids.append(token_ids)
         
         texts.append(dialogue_split_line)
@@ -117,9 +124,15 @@ if __name__=='__main__':
     print("Respliting data...")
     train_lines, valid_lines = resplit_data(total_lines)
     
-    print("Loading SentencePiece Tokenizer...")
-    tokenizer = spm.SentencePieceProcessor()
-    tokenizer.Load(f"{sp_dir}/{sp_prefix}.model")
+    print("Loading the tokenizer...")
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    special_tokens = {
+        'bos_token': bos,
+        'eos_token': eos,
+        'pad_token': pad,
+        'unk_token': unk
+    }
+    tokenizer.add_special_tokens(special_tokens)
     
     if not os.path.isdir(f"{data_dir}/{processed_dir}"):
         os.mkdir(f"{data_dir}/{processed_dir}")

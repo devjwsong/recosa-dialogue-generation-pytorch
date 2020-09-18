@@ -1,3 +1,4 @@
+from transformers import *
 from gru_transformer import *
 from recosa_transformer import *
 from custom_data import *
@@ -9,19 +10,18 @@ import torch
 import os, sys
 import numpy as np
 import argparse
-import sentencepiece as spm
 import time
 import copy
 
 
 class Manager():
-    def __init__(self, mode, model_type, ckpt_name=None):
+    def __init__(self, mode, model_type, use_gpt=False, ckpt_name=None):
         print("Setting the configurations...")
         self.config = {
             'model_type': model_type,
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-            'learning_rate': 0.0001,
-            'batch_size': 24,
+            'learning_rate': 0.0005,
+            'batch_size': 20,
             'num_epochs': 10,
             'max_len': 256,
             'num_heads': 8,
@@ -40,31 +40,45 @@ class Manager():
             'processed_dir': 'processed',
             'sp_dir': 'trained_sp',
             'sp_prefix': 'sp',
-            'pad_id': 0,
-            'bos_id': 1,
-            'eos_id': 2,
-            'unk_id': 3,
             'dialogue_split_line': '[END OF DIALOGUE]',
-            'end_command': 'abort!'
+            'end_command': 'abort!',
+            'bos': '<bos>',
+            'eos': '<eos>',
+            'pad': '<pad>',
         }
         self.config['gru_num_layers'] = 1 if self.config['model_type']=='gru' else 2
         self.config['hidden_size'] = 128 if self.config['model_type']=='gru' else self.config['d_model']
         self.config['gru_dropout'] = 0.0 if self.config['model_type']=='gru' else 0.3
         
-        # Sentencepiece tokenizer & vocab
-        self.tokenizer = spm.SentencePieceProcessor()
-        self.tokenizer.Load(f"{self.config['sp_dir']}/{self.config['sp_prefix']}.model")
-        with open(f"{self.config['sp_dir']}/{self.config['sp_prefix']}.vocab", 'r') as f:
-            lines = f.readlines()
-        self.config['vocab_size'] = len(lines)
+        # Tokenizer & Vocab
+        print("Loading tokenizer & embedding...")
+        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+        special_tokens = {
+            'bos_token': self.config['bos'],
+            'eos_token': self.config['eos'],
+            'pad_token': self.config['pad']
+        }
+        num_new_tokens = self.tokenizer.add_special_tokens(special_tokens)
+        vocab = self.tokenizer.get_vocab()
+        self.config['vocab_size'] = len(vocab)
+        self.config['bos_id'] = vocab[self.config['bos']]
+        self.config['eos_id'] = vocab[self.config['eos']]
+        self.config['pad_id'] = vocab[self.config['pad']]
+        
+        embedding = None
+        if use_gpt:
+            gpt2 = GPT2LMHeadModel.from_pretrained('gpt2')
+            num_ori_tokens = gpt2.transformer.wte.num_embeddings
+            gpt2.resize_token_embeddings(num_ori_tokens + num_new_tokens)
+            embedding = gpt2.transformer.wte
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
         if self.config['model_type'] == 'gru':
-            self.model = GRUTransformer(self.config).to(self.config['device'])
+            self.model = GRUTransformer(self.config, embedding=embedding).to(self.config['device'])
         elif self.config['model_type'] == 'recosa':
-            self.model = ReCoSaTransformer(self.config).to(self.config['device'])
-        self.optim = torch.optim.Adam(self.model.parameters(), lr=self.config['learning_rate'])
+            self.model = ReCoSaTransformer(self.config, embedding=embedding).to(self.config['device'])
+        self.optim = torch.optim.AdamW(self.model.parameters(), lr=self.config['learning_rate'])
         self.best_loss = sys.float_info.max
         
         if not os.path.exists(self.config['ckpt_dir']):
@@ -81,7 +95,7 @@ class Manager():
         else:
             print("Initializing the model...")
             self.model.init_model()
-              
+            
         if mode == 'train':
             # Load loss function
             print("Loading loss function...")
@@ -122,7 +136,7 @@ class Manager():
                     
                         if self.config['model_type'] == 'gru':                              
                             output, context = self.model(src_input, trg_input, context)  # (B, L, vocab_size), (B, d_h)
-                            
+                
                         elif self.config['model_type'] == 'recosa':
                             output, hists = self.model(src_input, trg_input, hists, num_turn=t)  # (B, L, vocab_size), (T, B, d_model)
                         
@@ -229,7 +243,7 @@ class Manager():
                     print("Bot: Good bye.")
                     break
 
-                tokens = self.tokenizer.EncodeAsIds(utter)
+                tokens = self.tokenizer.encode(utter)
                 if len(tokens) < self.config['max_len']:
                     src_input = tokens + [self.config['eos_id']]
                     src_input += [self.config['pad_id']] * (self.config['max_len'] - len(src_input))
@@ -248,12 +262,12 @@ class Manager():
                     context = next_context.clone()
                 elif self.config['model_type'] == 'recosa':
                     src_emb, hists = self.model.src_embed(src_input, hists, t)  # (B, L, d_model), (T, B, d_model)
-                    e_mask = self.model.make_encoder_mask(t, src_input)  # (B, 1, L)
+                    e_mask = self.model.make_encoder_mask(src_input, t)  # (B, 1, L)
                     e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 
                 if t % 2 == 0:
                     output_ids = self.nucleus_sampling(e_output, e_mask)  # (L) list
-                    utter = self.tokenizer.DecodeIds(output_ids)
+                    utter = self.tokenizer.decode(output_ids)
 
                     print(f"Bot: {utter}")
 
@@ -311,6 +325,7 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', required=True, help="Train or test?")
     parser.add_argument('--model_type', required=True, help="Context history method.")
+    parser.add_argument('--use_gpt', required=False, help='Using GPT2 embedding layer?')
     parser.add_argument('--ckpt_name', required=False, help="Best checkpoint file.")
               
     args = parser.parse_args()
@@ -320,15 +335,15 @@ if __name__=='__main__':
               
     if args.mode == 'train':
         if args.ckpt_name is not None:
-            manager = Manager(args.mode, args.model_type, ckpt_name=args.ckpt_name)
+            manager = Manager(args.mode, args.model_type, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
         else:
-            manager = Manager(args.mode, args.model_type)
+            manager = Manager(args.mode, args.model_type, use_gpt=args.use_gpt)
               
         manager.train()
         
     elif args.mode == 'test':
         assert args.ckpt_name is not None, "Please specify the trained model checkpoint."
         
-        manager = Manager(args.mode, args.model_type, ckpt_name=args.ckpt_name)
+        manager = Manager(args.mode, args.model_type, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
         
         manager.test()

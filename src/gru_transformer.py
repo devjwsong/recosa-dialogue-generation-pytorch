@@ -8,7 +8,7 @@ import random
 
 
 class GRUTransformer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, embedding=None):
         super().__init__()
         
         # Seed fixing
@@ -18,9 +18,17 @@ class GRUTransformer(nn.Module):
         random.seed(777)
         
         self.config = config
+        self.use_gpt = False
+        if embedding is not None:
+            self.use_gpt = True
         
         # Transformer components
-        self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
+        if self.use_gpt:
+            self.embedding = embedding  # GPT2 word embedding layer
+            self.embedding_linear = nn.Linear(self.embedding.embedding_dim, self.config['d_model'])
+        else:
+            self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
+            
         self.positional_embedding = PositionalEncoder(self.config['max_len'], self.config['d_model'], self.config['device'])
         self.encoder = Encoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['encoder_num_layers'])
         self.decoder = Decoder(self.config['d_model'], self.config['d_ff'], self.config['num_heads'], self.config['dropout'], self.config['decoder_num_layers'])
@@ -52,7 +60,7 @@ class GRUTransformer(nn.Module):
         src_emb = self.embed(src_input)  # (B, L, d_model)
         trg_emb = self.embed(trg_input)  # (B, L, d_model)
         e_mask = self.make_encoder_mask(src_input)  # (B, 1, L)
-        d_mask = self.make_encoder_mask(trg_input)  # (B, L, L)
+        d_mask = self.make_decoder_mask(trg_input)  # (B, L, L)
         
         # Encoding phase
         e_output = self.encoder(src_emb, e_mask)  # (B, L, d_model)
@@ -85,7 +93,9 @@ class GRUTransformer(nn.Module):
         return d_mask
     
     def embed(self, input_x):
-        x_emb = self.embedding(input_x)  # (B, L, d_model)
+        x_emb = self.embedding(input_x)  # (B, L, d_model) or (B, L, e_dim)
+        if self.use_gpt:
+            x_emb = self.embedding_linear(x_emb)  # (B, L, d_model)
         x_emb = self.positional_embedding(x_emb, cal='add')  # (B, L, d_model)
     
         return x_emb

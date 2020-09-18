@@ -8,7 +8,7 @@ import random
 
 
 class ReCoSaTransformer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, embedding=None):
         super().__init__()
         
         # Seed fixing
@@ -18,9 +18,16 @@ class ReCoSaTransformer(nn.Module):
         random.seed(777)
         
         self.config = config
+        self.use_gpt = False
+        if embedding is not None:
+            self.use_gpt = True
         
         # Embedding components
-        self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
+        if self.use_gpt:
+            self.embedding = embedding  # GPT2 word embedding layer
+            self.embedding_linear = nn.Linear(self.embedding.embedding_dim, self.config['d_model'])
+        else:
+            self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
         self.word_pembedding = PositionalEncoder(self.config['max_len'], self.config['d_model'], self.config['device'])
         self.turn_pembedding = PositionalEncoder(self.config['max_turn'], self.config['d_model'], self.config['device'])
         
@@ -63,7 +70,7 @@ class ReCoSaTransformer(nn.Module):
         # Embeddings & Masking
         src_emb, hists = self.src_embed(src_input, hists, num_turn)  # (B, T, 2*d_model), (T, B, d_model)
         trg_emb = self.trg_embed(trg_input)  # (B, L, 2*d_model)
-        e_mask = self.make_encoder_mask(num_turn, src_input)  # (B, 1, T)
+        e_mask = self.make_encoder_mask(src_input, num_turn)  # (B, 1, T)
         d_mask = self.make_decoder_mask(trg_input)  # (B, L, L)
         
         # Encoding phase
@@ -78,9 +85,9 @@ class ReCoSaTransformer(nn.Module):
         
         return output, hists  # (B, L, vocab_size), (T, B, d_model)
         
-    def make_encoder_mask(self, num_turn, src_input):
+    def make_encoder_mask(self, src_input, num_turn):
         e_mask = torch.BoolTensor([1 for i in range(num_turn+1)] + [0 for i in range(self.config['max_turn']-num_turn-1)]).to(self.config['device'])
-        e_mask = e_mask.unsqueeze(-1).repeat(1, src_input.shape[0]).transpose(0, 1).unsqueeze(1)  # (B, 1, T)
+        e_mask = e_mask.unsqueeze(0).repeat(src_input.shape[0], 1).unsqueeze(1)  # (B, 1, T)
         
         return e_mask
     
@@ -94,7 +101,9 @@ class ReCoSaTransformer(nn.Module):
         return d_mask
     
     def src_embed(self, src_input, hists, num_turn):
-        src_emb = self.embedding(src_input)  # (B, L, d_model)
+        src_emb = self.embedding(src_input)  # (B, L, d_model) or (B, L, e_dim)
+        if self.use_gpt:
+            src_emb = self.embedding_linear(src_emb)  # (B, L, d_model)
         last_hist = self.word_level_rnn(src_emb)[1][-1]  # (B, d_model)
 
         hists[num_turn] = last_hist  # (T, B, d_model)
@@ -104,7 +113,9 @@ class ReCoSaTransformer(nn.Module):
         return src_emb, hists  # (B, T, 2*d_model), (T, B, d_model)
     
     def trg_embed(self, trg_input):
-        trg_emb = self.embedding(trg_input)  # (B, L, d_model)
+        trg_emb = self.embedding(trg_input)  # (B, L, d_model) or (B, L, e_dim)
+        if self.use_gpt:
+            trg_emb = self.embedding_linear(trg_emb)  # (B, L, d_model)
         trg_emb = self.word_pembedding(trg_emb, cal='concat')  # (B, L, 2*d_model)
         
         return trg_emb  # (B, L, 2*d_model)
