@@ -15,10 +15,9 @@ import copy
 
 
 class Manager():
-    def __init__(self, mode, model_type, use_gpt=False, ckpt_name=None):
+    def __init__(self, mode, use_gpt=False, ckpt_name=None):
         print("Setting the configurations...")
         self.config = {
-            'model_type': model_type,
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'learning_rate': 0.0005,
             'batch_size': 20,
@@ -46,9 +45,9 @@ class Manager():
             'eos': '<eos>',
             'pad': '<pad>',
         }
-        self.config['gru_num_layers'] = 1 if self.config['model_type']=='gru' else 2
-        self.config['hidden_size'] = 128 if self.config['model_type']=='gru' else self.config['d_model']
-        self.config['gru_dropout'] = 0.0 if self.config['model_type']=='gru' else 0.3
+        self.config['gru_num_layers'] =  2
+        self.config['hidden_size'] = self.config['d_model']
+        self.config['gru_dropout'] = 0.3
         
         # Tokenizer & Vocab
         print("Loading tokenizer & embedding...")
@@ -74,10 +73,7 @@ class Manager():
         
         # Load model & optimizer      
         print("Loading the model and optimizer...")
-        if self.config['model_type'] == 'gru':
-            self.model = GRUTransformer(self.config, embedding=embedding).to(self.config['device'])
-        elif self.config['model_type'] == 'recosa':
-            self.model = ReCoSaTransformer(self.config, embedding=embedding).to(self.config['device'])
+        self.model = ReCoSaTransformer(self.config, embedding=embedding).to(self.config['device'])
         self.optim = torch.optim.AdamW(self.model.parameters(), lr=self.config['learning_rate'])
         self.best_loss = sys.float_info.max
         
@@ -324,26 +320,24 @@ class Manager():
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', required=True, help="Train or test?")
-    parser.add_argument('--model_type', required=True, help="Context history method.")
     parser.add_argument('--use_gpt', required=False, help='Using GPT2 embedding layer?')
     parser.add_argument('--ckpt_name', required=False, help="Best checkpoint file.")
               
     args = parser.parse_args()
     
     assert args.mode == 'train' or args.mode=='test', print("Please specify a correct mode name, 'train' or 'test'.")
-    assert args.model_type == 'gru' or args.model_type=='recosa', print("Please specify a correct model type, 'gru' or 'recosa'.")
               
     if args.mode == 'train':
         if args.ckpt_name is not None:
-            manager = Manager(args.mode, args.model_type, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
+            manager = Manager(args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
         else:
-            manager = Manager(args.mode, args.model_type, use_gpt=args.use_gpt)
+            manager = Manager(args.mode, use_gpt=args.use_gpt)
               
         manager.train()
         
     elif args.mode == 'test':
         assert args.ckpt_name is not None, "Please specify the trained model checkpoint."
         
-        manager = Manager(args.mode, args.model_type, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
+        manager = Manager(args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
         
         manager.test()
