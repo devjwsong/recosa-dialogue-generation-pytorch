@@ -15,7 +15,7 @@ class CustomDataset(Dataset):
         
         print(f"Loading {data_name}_id.txt...")
         with open(f"{config['data_dir']}/{config['processed_dir']}/{data_name}_id.txt", 'r') as f:
-            lines = f.readlines()[:1000]
+            lines = f.readlines()
         
         self.src_inputs = []  # (N, T, L)
         self.trg_inputs = []  # (N, L)
