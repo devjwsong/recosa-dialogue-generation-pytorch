@@ -203,7 +203,7 @@ class Manager():
                     tokens = self.tokenizer.encode(utter)
                     if len(tokens) < self.config['max_len']:
                         sent = tokens + [self.config['eos_id']]
-                        sent += [self.config['pad_id']] * (self.config['max_len'] - len(src_input))
+                        sent += [self.config['pad_id']] * (self.config['max_len'] - len(sent))
                     else:
                         sent = src_input[:self.config['max_len']]
                         sent[-1] = self.config['eos_id']
@@ -212,7 +212,8 @@ class Manager():
                     src_input = torch.LongTensor(history).unsqueeze(0).to(self.config['device'])  # (B, T, L)
 
                     src_emb = self.model.src_embed(src_input)  # (B, L, 2*d_model)
-                    e_mask = torch.BoolTensor([1 for i in range(t+1)] + [0 for i in range(self.config['max_turn']-t-1)])
+                    e_mask = [1 for i in range(t+1)] + [0 for i in range(self.config['max_turn']-t-1)]
+                    e_mask = torch.BoolTensor(e_mask).unsqueeze(0).unsqueeze(0).to(self.config['device'])  # (B, 1, T)
                     e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 
                     output_ids = self.nucleus_sampling(e_output, e_mask)  # (L) list
@@ -234,12 +235,14 @@ class Manager():
         output_ids = []
         
         for pos in range(self.config['max_len']):
-            if self.config['model_type'] == 'gru':
-                trg_emb = self.model.embed(trg_input)  # (B, L, d_model)
-            elif self.config['model_type'] == 'recosa':
-                trg_emb = self.model.trg_embed(trg_input)  # (B, L, 2*d_model)
-            d_mask = self.model.make_decoder_mask(trg_input)  # (B, L, L)
-            d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, d_model) or (B, L, 2*d_model)
+            trg_emb = self.model.trg_embed(trg_input)  # (B, L, 2*d_model)
+            
+            d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (N, 1, L)
+            nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool)  # (1, L, L)
+            nopeak_mask = torch.tril(nopeak_mask).to(self.config['device'])  # (1, L, L) to triangular shape
+            d_mask = d_mask & nopeak_mask  # (N, L, L) padding false
+            
+            d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, 2*d_model)
             
             output = F.softmax(self.model.output_linear(d_output), dim=-1)  # (B, L, vocab_size)
             output = output[:,pos]  # (B, vocab_size)
@@ -263,9 +266,6 @@ class Manager():
             output_ids.append(idxs.squeeze(0).item())    
             if idxs.squeeze(0).item() == self.config['eos_id']:
                 break
-            
-            del output, sorted_probs, sorted_idxs, cumsum_probs, idx_remove, probs, idxs
-            torch.cuda.empty_cache()
             
         if output_ids[-1]== self.config['eos_id']:
             output_ids = output_ids[:-1]
