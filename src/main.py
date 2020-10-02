@@ -119,38 +119,19 @@ class Manager():
                     src_inputs.to(self.config['device']), trg_inputs.to(self.config['device']), trg_outputs.to(self.config['device']), \
                     e_mask.to(self.config['device']), d_mask.to(self.config['device'])
               
-
+                output = self.model(src_inputs, trg_inputs, e_mask, d_mask)  # (B, L, vocab_size)
                 
-            
-                for t in range(self.config['max_turn']):
-                    if t < self.config['max_turn']-1:
-                        src_input, trg_input, trg_output = \
-                            src_inputs[:, t].to(self.config['device']), \
-                            trg_inputs[:, t].to(self.config['device']), \
-                            trg_outputs[: ,t].to(self.config['device'])  # (B, L)
-                    
-                        if self.config['model_type'] == 'gru':                              
-                            output, context = self.model(src_input, trg_input, context)  # (B, L, vocab_size), (B, d_h)
+                self.optim.zero_grad()
                 
-                        elif self.config['model_type'] == 'recosa':
-                            output, hists = self.model(src_input, trg_input, hists, num_turn=t)  # (B, L, vocab_size), (T, B, d_model)
-                        
-                        self.optim.zero_grad()
-              
-                        loss = self.criterion(
-                            output.view(-1, self.config['vocab_size']),
-                            trg_output.contiguous().view(output.shape[0] * output.shape[1])
-                        )
-                  
-                        loss.backward(retain_graph=True)
-                        self.optim.step()
-              
-                        dialogue_losses.append(loss.item())
+                loss = self.criterion(
+                    output.view(-1, self.config['vocab_size']),
+                    trg_output.contiguous().view(output.shape[0] * output.shape[1])
+                )
                 
-                        del src_input, trg_input, trg_output
-                        torch.cuda.empty_cache()
+                loss.backward()
+                self.optim.step()
                 
-                train_losses += dialogue_losses
+                train_losses.append(loss.item())
               
             mean_train_loss = np.mean(train_losses)
             print(f"Train loss: {mean_train_loss}")
@@ -180,37 +161,19 @@ class Manager():
         valid_losses = []
         with torch.no_grad():
             for i, batch in enumerate(tqdm(self.valid_loader)):
-                src_inputs, trg_inputs, trg_outputs = batch[:, :, 0], batch[:, :, 1], batch[:, :, 2]  # (B, T, L)
+                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = batch
+                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = \
+                    src_inputs.to(self.config['device']), trg_inputs.to(self.config['device']), trg_outputs.to(self.config['device']), \
+                    e_mask.to(self.config['device']), d_mask.to(self.config['device'])
               
-                dialogue_losses = []
-                # Only used for context GRU.
-                context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
-                # Only used for ReCoSa.
-                hists = torch.zeros(self.config['max_turn'], src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
-                for t in range(self.config['max_turn']):
-                    if t < self.config['max_turn']-1:
-                        src_input, trg_input, trg_output = \
-                            src_inputs[:, t].to(self.config['device']), \
-                            trg_inputs[:, t].to(self.config['device']), \
-                            trg_outputs[: ,t].to(self.config['device'])  # (B, L)
-                    
-                        if self.config['model_type'] == 'gru':                              
-                            output, context = self.model(src_input, trg_input, context)  # (B, L, vocab_size), (B, d_h)
-                            
-                        elif self.config['model_type'] == 'recosa':
-                            output, hists = self.model(src_input, trg_input, hists, num_turn=t)  # (B, L, vocab_size), (T, B, d_model)
-              
-                        loss = self.criterion(
-                            output.view(-1, self.config['vocab_size']),
-                            trg_output.contiguous().view(output.shape[0] * output.shape[1])
-                        )
-              
-                        dialogue_losses.append(loss.item())
+                output = self.model(src_inputs, trg_inputs, e_mask, d_mask)  # (B, L, vocab_size)
                 
-                        del src_input, trg_input, trg_output
-                        torch.cuda.empty_cache()
-                    
-                valid_losses += dialogue_losses
+                loss = self.criterion(
+                    output.view(-1, self.config['vocab_size']),
+                    trg_output.contiguous().view(output.shape[0] * output.shape[1])
+                )
+                
+                valid_losses.append(loss.item())
               
         mean_valid_loss = np.mean(valid_losses)
               
@@ -223,48 +186,42 @@ class Manager():
         self.model.eval()
         
         with torch.no_grad():
+            # Diagloue history
+            init = [self.config['pad_id']] * self.config['max_len']
+            history = [init for t in range(self.config['max_turn'])]  # (T, L)
+            
             utter = None
-            
-            # Only used for context GRU.
-            context = torch.zeros(self.config['hidden_size']).unsqueeze(0).to(self.config['device'])
-            # Only used for ReCoSa.
-            hists = torch.zeros(self.config['max_turn'], self.config['d_model']).unsqueeze(1).to(self.config['device'])
-            
+            output_ids = None
             for t in range(self.config['max_turn']):
                 if t % 2 == 0:
                     utter = input("You: ")
                     
-                if utter == self.config['end_command']:
-                    print("Bot: Good bye.")
-                    break
+                    if utter == self.config['end_command']:
+                        print("Bot: Good bye.")
+                        break
 
-                tokens = self.tokenizer.encode(utter)
-                if len(tokens) < self.config['max_len']:
-                    src_input = tokens + [self.config['eos_id']]
-                    src_input += [self.config['pad_id']] * (self.config['max_len'] - len(src_input))
-                else:
-                    src_input = src_input[:self.config['max_len']]
-                    src_input[-1] = self.config['eos_id']
+                    tokens = self.tokenizer.encode(utter)
+                    if len(tokens) < self.config['max_len']:
+                        sent = tokens + [self.config['eos_id']]
+                        sent += [self.config['pad_id']] * (self.config['max_len'] - len(src_input))
+                    else:
+                        sent = src_input[:self.config['max_len']]
+                        sent[-1] = self.config['eos_id']
 
-                src_input = torch.LongTensor(src_input).unsqueeze(0).to(self.config['device'])  # (B, L)
-                
-                if self.config['model_type'] == 'gru':
-                    src_emb = self.model.embed(src_input)  # (B, L, d_model)
-                    e_mask = self.model.make_encoder_mask(src_input)  # (B, 1, L)
-                    e_output = self.model.encoder(src_emb, e_mask)  # (B, L, d_model)
-                    next_context = self.context_update(context, e_output)  # (B, d_model)
-                    e_output = self.combine_context(e_output, context)  # (B, L, d_model)
-                    context = next_context.clone()
-                elif self.config['model_type'] == 'recosa':
-                    src_emb, hists = self.model.src_embed(src_input, hists, t)  # (B, L, d_model), (T, B, d_model)
-                    e_mask = self.model.make_encoder_mask(src_input, t)  # (B, 1, L)
+                    history[t] = sent
+                    src_input = torch.LongTensor(history).unsqueeze(0).to(self.config['device'])  # (B, T, L)
+
+                    src_emb = self.model.src_embed(src_input)  # (B, L, 2*d_model)
+                    e_mask = torch.BoolTensor([1 for i in range(t+1)] + [0 for i in range(self.config['max_turn']-t-1)])
                     e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 
-                if t % 2 == 0:
                     output_ids = self.nucleus_sampling(e_output, e_mask)  # (L) list
-                    utter = self.tokenizer.decode(output_ids)
+                    res = self.tokenizer.decode(output_ids)
 
-                    print(f"Bot: {utter}")
+                    print(f"Bot: {res}")
+                    
+                else:
+                    history[t] = output_ids
 
                 if t == self.config['max_turn']-1:
                     print("This is the last turn.")
