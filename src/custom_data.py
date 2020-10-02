@@ -9,12 +9,12 @@ class CustomDataset(Dataset):
         assert data_type == 'train' or data_type == 'valid', "Data type incorrect. It should be 'train' or 'valid'."
         
         if data_type == 'train':
-            data_name = self.config['train_name']
+            data_name = config['train_name']
         elif data_type == 'valid':
-            data_name = self.config['valid_name']
+            data_name = config['valid_name']
         
         print(f"Loading {data_name}_id.txt...")
-        with open(f"{self.config['data_dir']}/{self.config['processed_dir']}/{data_name}_id.txt", 'r') as f:
+        with open(f"{config['data_dir']}/{config['processed_dir']}/{data_name}_id.txt", 'r') as f:
             lines = f.readlines()
         
         self.src_inputs = []  # (N, T, L)
@@ -28,16 +28,16 @@ class CustomDataset(Dataset):
         history = [init for t in range(config['max_turn'])]  # (T, L)
         num_turn = 0
         for i, line in enumerate(tqdm(lines)):
-            if line.strip() == self.config['dialogue_split_line']:
+            if line.strip() == config['dialogue_split_line']:
                 history = [init for t in range(config['max_turn'])]
                 num_turn = 0
-            elif i+1<len(lines) and lines[i+1].strip() != self.config['dialogue_split_line']:                    
+            elif i+1<len(lines) and lines[i+1].strip() != config['dialogue_split_line']:                    
                 if num_turn < config['max_turn']:
                     src_sent = [int(token) for token in line.strip().split(' ')]
                     trg_sent = [int(token) for token in lines[i+1].strip().split(' ')]
 
-                    src_input = self.process_src(src_sent)
-                    trg_input, trg_output = self.process_trg(trg_sent)
+                    src_input = self.process_src(src_sent, config['max_len'], config['bos_id'], config['eos_id'], config['pad_id'])
+                    trg_input, trg_output = self.process_trg(trg_sent, config['max_len'], config['bos_id'], config['eos_id'], config['pad_id'])
                     
                     history[num_turn] = src_input
                     e_mask = self.make_encoder_mask(num_turn, config['max_turn'])
@@ -57,30 +57,30 @@ class CustomDataset(Dataset):
         self.d_masks = self.make_decoder_mask(self.trg_inputs, config['pad_id'], config['max_len'])  # (N, L, L)
         
             
-    def process_src(self, src_sent):
-        if len(src_sent) < self.config['max_len']:
-            src_input = src_sent + [self.config['eos_id']]
-            src_input += [self.config['pad_id']] * (self.config['max_len'] - len(src_input))
+    def process_src(self, src_sent, max_len, bos_id, eos_id, pad_id):
+        if len(src_sent) < max_len:
+            src_input = src_sent + [eos_id]
+            src_input += [pad_id] * (max_len - len(src_input))
         else:
-            src_input = src_sent[:self.config['max_len']]
-            src_input[-1] = self.config['eos_id']
+            src_input = src_sent[:max_len]
+            src_input[-1] =eos_id
             
         return src_input
     
-    def process_trg(self, trg_sent):
-        if len(trg_sent) < self.config['max_len']:
-            trg_output = trg_sent + [self.config['eos_id']]
-            trg_output += [self.config['pad_id']] * (self.config['max_len'] - len(trg_output))
+    def process_trg(self, trg_sent, max_len, bos_id, eos_id, pad_id):
+        if len(trg_sent) < max_len:
+            trg_output = trg_sent + [eos_id]
+            trg_output += [pad_id] * (max_len - len(trg_output))
         else:
-            trg_output = trg_sent[:self.config['max_len']]
-            trg_output[-1] = self.config['eos_id']
+            trg_output = trg_sent[:max_len]
+            trg_output[-1] = eos_id
             
-        if len(trg_sent) < self.config['max_len']:
-            trg_input = [self.config['bos_id']] + trg_sent
-            trg_input += [self.config['pad_id']] * (self.config['max_len'] - len(trg_input))
+        if len(trg_sent) < max_len:
+            trg_input = [bos_id] + trg_sent
+            trg_input += [pad_id] * (max_len - len(trg_input))
         else:
-            trg_input = [self.config['bos_id']] + trg_sent
-            trg_input = trg_input[:self.config['max_len']]
+            trg_input = [bos_id] + trg_sent
+            trg_input = trg_input[:max_len]
             
         return trg_input, trg_output
     

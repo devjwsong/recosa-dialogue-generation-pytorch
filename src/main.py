@@ -19,7 +19,7 @@ class Manager():
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'learning_rate': 0.0005,
-            'batch_size': 20,
+            'batch_size': 24,
             'num_epochs': 10,
             'max_len': 256,
             'num_heads': 8,
@@ -125,7 +125,7 @@ class Manager():
                 
                 loss = self.criterion(
                     output.view(-1, self.config['vocab_size']),
-                    trg_output.contiguous().view(output.shape[0] * output.shape[1])
+                    trg_outputs.contiguous().view(output.shape[0] * output.shape[1])
                 )
                 
                 loss.backward()
@@ -170,7 +170,7 @@ class Manager():
                 
                 loss = self.criterion(
                     output.view(-1, self.config['vocab_size']),
-                    trg_output.contiguous().view(output.shape[0] * output.shape[1])
+                    trg_outputs.contiguous().view(output.shape[0] * output.shape[1])
                 )
                 
                 valid_losses.append(loss.item())
