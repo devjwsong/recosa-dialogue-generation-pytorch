@@ -1,5 +1,4 @@
 from transformers import *
-from gru_transformer import *
 from recosa_transformer import *
 from custom_data import *
 from tqdm import tqdm
@@ -115,14 +114,14 @@ class Manager():
             print(f"#################### Epoch: {epoch} ####################")
             train_losses = []  
             for i, batch in enumerate(tqdm(self.train_loader)):
-                src_inputs, trg_inputs, trg_outputs = batch[:, :, 0], batch[:, :, 1], batch[:, :, 2]  # (B, T, L)
+                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = batch
+                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = \
+                    src_inputs.to(self.config['device']), trg_inputs.to(self.config['device']), trg_outputs.to(self.config['device']), \
+                    e_mask.to(self.config['device']), d_mask.to(self.config['device'])
               
-                dialogue_losses = []
+
                 
-                # Only used for context GRU.
-                context = torch.zeros(src_inputs.shape[0], self.config['hidden_size']).to(self.config['device'])
-                # Only used for ReCoSa.
-                hists = torch.zeros(self.config['max_turn'], src_inputs.shape[0], self.config['d_model']).to(self.config['device'])
+            
                 for t in range(self.config['max_turn']):
                     if t < self.config['max_turn']-1:
                         src_input, trg_input, trg_output = \

@@ -66,12 +66,10 @@ class ReCoSaTransformer(nn.Module):
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
             
-    def forward(self, src_input, trg_input, hists, num_turn):
+    def forward(self, src_input, trg_input, e_mask, d_mask):
         # Embeddings & Masking
-        src_emb, hists = self.src_embed(src_input, hists, num_turn)  # (B, T, 2*d_model), (T, B, d_model)
+        src_emb = self.src_embed(src_input)  # (B, T, 2*d_model)
         trg_emb = self.trg_embed(trg_input)  # (B, L, 2*d_model)
-        e_mask = self.make_encoder_mask(src_input, num_turn)  # (B, 1, T)
-        d_mask = self.make_decoder_mask(trg_input)  # (B, L, L)
         
         # Encoding phase
         e_output = self.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
@@ -81,36 +79,20 @@ class ReCoSaTransformer(nn.Module):
         
         output = self.softmax(self.output_linear(d_output))  # (B, L, vocab_size)
         
-        del e_mask, d_mask
-        
-        return output, hists  # (B, L, vocab_size), (T, B, d_model)
-        
-    def make_encoder_mask(self, src_input, num_turn):
-        e_mask = torch.BoolTensor([1 for i in range(num_turn+1)] + [0 for i in range(self.config['max_turn']-num_turn-1)]).to(self.config['device'])
-        e_mask = e_mask.unsqueeze(0).repeat(src_input.shape[0], 1).unsqueeze(1)  # (B, 1, T)
-        
-        return e_mask
+        return output  # (B, L, vocab_size)
     
-    def make_decoder_mask(self, trg_input):
-        d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
-
-        nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool).to(self.config['device'])  # (1, L, L)
-        nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
-        d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
-        
-        return d_mask
-    
-    def src_embed(self, src_input, hists, num_turn):
-        src_emb = self.embedding(src_input)  # (B, L, d_model) or (B, L, e_dim)
+    def src_embed(self, src_input):
+        src_emb = self.embedding(src_input)  # (B, T, L, d_model) or (B, T, L, e_dim)
         if self.use_gpt:
-            src_emb = self.embedding_linear(src_emb)  # (B, L, d_model)
-        last_hist = self.word_level_rnn(src_emb)[1][-1]  # (B, d_model)
+            src_emb = self.embedding_linear(src_emb)  # (B, T, L, d_model)
+        max_len, d_model = src_emb.shape[2], src_emb.shape[3]
+        last_hiddens = self.word_level_rnn(src_emb.view(-1, max_len, d_model))[1][-1]  # (B*T, d_model)
 
-        hists[num_turn] = last_hist  # (T, B, d_model)
-        src_emb = hists.transpose(0, 1)  # (B, T, d_model)
+        batch_size = src_emb.shape[0]
+        src_emb = last_hiddens.view(batch_size, -1, d_model)  # (B, T, d_model)
         src_emb = self.turn_pembedding(src_emb, cal='concat')  # (B, T, 2*d_model)
         
-        return src_emb, hists  # (B, T, 2*d_model), (T, B, d_model)
+        return src_emb  # (B, T, 2*d_model)
     
     def trg_embed(self, trg_input):
         trg_emb = self.embedding(trg_input)  # (B, L, d_model) or (B, L, e_dim)
