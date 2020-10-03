@@ -182,7 +182,7 @@ class Manager():
               
     def test(self):
         print("Let's start!")
-        print(f"If you want to quit the converstation, please type \"{self.config['end_command']}\".")
+        print(f"If you want to quit the conversation, please type \"{self.config['end_command']}\".")
         self.model.eval()
         
         with torch.no_grad():
@@ -205,7 +205,7 @@ class Manager():
                         sent = tokens + [self.config['eos_id']]
                         sent += [self.config['pad_id']] * (self.config['max_len'] - len(sent))
                     else:
-                        sent = src_input[:self.config['max_len']]
+                        sent = tokens[:self.config['max_len']]
                         sent[-1] = self.config['eos_id']
 
                     history[t] = sent
@@ -222,7 +222,14 @@ class Manager():
                     print(f"Bot: {res}")
                     
                 else:
-                    history[t] = output_ids
+                    if len(output_ids) < self.config['max_len']:
+                        sent = output_ids + [self.config['eos_id']]
+                        sent += [self.config['pad_id']] * (self.config['max_len'] - len(sent))
+                    else:
+                        sent = output_ids[:self.config['max_len']]
+                        sent[-1] = self.config['eos_id']
+                        
+                    history[t] = sent
 
                 if t == self.config['max_turn']-1:
                     print("This is the last turn.")
@@ -237,10 +244,10 @@ class Manager():
         for pos in range(self.config['max_len']):
             trg_emb = self.model.trg_embed(trg_input)  # (B, L, 2*d_model)
             
-            d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (N, 1, L)
+            d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
             nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool)  # (1, L, L)
             nopeak_mask = torch.tril(nopeak_mask).to(self.config['device'])  # (1, L, L) to triangular shape
-            d_mask = d_mask & nopeak_mask  # (N, L, L) padding false
+            d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
             
             d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, 2*d_model)
             
