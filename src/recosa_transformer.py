@@ -72,7 +72,7 @@ class ReCoSaTransformer(nn.Module):
         trg_emb = self.trg_embed(trg_input)  # (B, L, 2*d_model)
         
         # Encoding phase
-        e_output = self.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
+        e_output = self.encoder(src_emb, e_mask)  # (B, T, 2*d_model)
         
         # Decoding phase
         d_output = self.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, 2*d_model)
@@ -82,7 +82,7 @@ class ReCoSaTransformer(nn.Module):
         return output  # (B, L, vocab_size)
     
     def src_embed(self, src_input):
-        src_emb = self.embedding(src_input)  # (B, T, L, d_model) or (B, T, L, e_dim)
+        src_emb = self.embedding(src_input)  # (B, T, L, d_model)
         if self.use_gpt:
             src_emb = self.embedding_linear(src_emb)  # (B, T, L, d_model)
         max_len, d_model = src_emb.shape[2], src_emb.shape[3]
@@ -95,7 +95,7 @@ class ReCoSaTransformer(nn.Module):
         return src_emb  # (B, T, 2*d_model)
     
     def trg_embed(self, trg_input):
-        trg_emb = self.embedding(trg_input)  # (B, L, d_model) or (B, L, e_dim)
+        trg_emb = self.embedding(trg_input)  # (B, L, d_model)
         if self.use_gpt:
             trg_emb = self.embedding_linear(trg_emb)  # (B, L, d_model)
         trg_emb = self.word_pembedding(trg_emb, cal='concat')  # (B, L, 2*d_model)

@@ -1,5 +1,6 @@
 from tqdm import tqdm
 from transformers import *
+from datasets import *
 
 import torch
 import os
@@ -7,47 +8,62 @@ import os
 
 # Parameters for data
 data_dir = 'data'
-raw_data_dir = 'raw'
-sp_dir = 'trained_sp'
-sp_prefix = 'sp'
-processed_dir = 'processed'
 train_name = 'train'
 valid_name = 'validation'
-test_name = 'test'
-raw_name_prefix = 'dialogues'
 train_frac = 0.85
 space = 'Ġ'
 pad = '<pad>'
 unk = '<unk>'
 bos = '<bos>'
 eos = '<eos>'
-pre_quote = '’'
-end_of_utterance = '__eou__'
-end_marks = ['.', ',', '?', '!', '...']
-quotes = ['"', '\'']
-abbreviations = ['s', 'd', 't', 'm', 're', 'll', 've', 'S', 'D', 'T', 'M', 'Re', 'Ll', 'Ve']
+dataset_list = ['daily_dialog']
 dialogue_split_line = "[END OF DIALOGUE]"
 
 
-def merge_data(total_lines, data_path):
-    with open(data_path, 'r') as f:
-        lines = f.readlines()
+def load_daily_dialog():
+    dataset = load_dataset('daily_dialog')
+    train_dialogues = dataset['train']['dialog']
+    valid_dialogues = dataset['validation']['dialog']
+    test_dialogues = dataset['test']['dialog']
+    
+    train_utter_num = 0
+    valid_utter_num = 0
+    
+    total_dialogues = train_dialogues + valid_dialogues + test_dialogues
+    
+    for i, dialogue in enumerate(tqdm(total_dialogues)):
+        new_dialogue = []
+        for utter in dialogue:
+            token_list = tokenizer.tokenize(utter.strip())
+            token_list = trim_daily_dialog(token_list)
+            text = tokenizer.convert_tokens_to_string(token_list)
+            new_dialogue.append(text)
+            
+        total_dialogues[i] = new_dialogue
         
-    total_lines += lines
+    train_dialogues = total_dialogues[:int(len(total_dialogues)*train_frac)]
+    valid_dialogues = total_dialogues[int(len(total_dialogues)*train_frac):]
     
-    return total_lines
-
-
-def resplit_data(total_lines):
-    train_lines = total_lines[:int(len(total_lines) * train_frac)]
-    valid_lines = total_lines[int(len(total_lines) * train_frac):]
+    for dialogue in train_dialogues:
+        train_utter_num += len(dialogue)
+        
+    for dialogue in valid_dialogues:
+        valid_utter_num += len(dialogue)
     
-    return train_lines, valid_lines
+    return train_dialogues, valid_dialogues, train_utter_num, valid_utter_num
+    
 
-
-def process_token_list(token_list):
+def trim_daily_dialog(token_list):
+    pre_quote = '’'
+    end_marks = ['.', ',', '?', '!', '...']
+    quotes = ['"', '\'']
+    abbreviations = ['s', 'd', 't', 'm', 're', 'll', 've', 'S', 'D', 'T', 'M', 'Re', 'Ll', 'Ve']
+    
     quote_count = 0
+    
     for i, token in enumerate(token_list):
+        token_list[i] = token.replace(pre_quote, quotes[1])
+        
         if space in token:
             if token[1:] in end_marks or token[1:] in abbreviations:
                 token_list[i] = token[1:]
@@ -76,38 +92,26 @@ def process_token_list(token_list):
     return new_token_list
 
 
-def save_data(lines, tokenizer, name):
+def save_data(dialogues, name):
     texts = []
     ids = []
-    for line in tqdm(lines):
-        dialogue = line.strip().replace(' __eou__ ', '__eou__')
-        dialogue = dialogue.replace(' __eou__', '__eou__')
-        dialogue = dialogue.replace('__eou__ ', '__eou__')
-
-        utters = dialogue.split('__eou__')[:-1]
+    for dialogue in tqdm(dialogues):
         dialogue_ids = []
-        
-        for utter in utters:
-            utter = utter.replace(pre_quote, quotes[1])
-            token_list = tokenizer.tokenize(utter)
-            token_list = process_token_list(token_list)
-            
-            text = tokenizer.convert_tokens_to_string(token_list)
-            texts.append(text)
-            
-            token_ids = tokenizer(text)['input_ids']
+        for utter in dialogue:   
+            texts.append(utter)
+            token_ids = tokenizer(utter)['input_ids']
             dialogue_ids.append(token_ids)
         
         texts.append(dialogue_split_line)
         ids.append(dialogue_ids)
     
     print(f"Saving {name} text file...")
-    with open(f"{data_dir}/{processed_dir}/{name}.txt", 'w') as f:
+    with open(f"{data_dir}/{name}.txt", 'w') as f:
         for text in tqdm(texts):
             f.write(f"{text}\n")
     
     print(f"Saving {name} id file...")
-    with open(f"{data_dir}/{processed_dir}/{name}_id.txt", 'w') as f:
+    with open(f"{data_dir}/{name}_id.txt", 'w') as f:
         for dialogue in tqdm(ids):
             for utter in dialogue:
                 utter_str = [str(idx) for idx in utter]
@@ -116,14 +120,6 @@ def save_data(lines, tokenizer, name):
 
 
 if __name__=='__main__':
-    print("Merging all dialogue dataset...")
-    total_lines = merge_data([], f"{data_dir}/{raw_data_dir}/dialogues_{train_name}.txt")
-    total_lines = merge_data(total_lines, f"{data_dir}/{raw_data_dir}/dialogues_{valid_name}.txt")
-    total_lines = merge_data(total_lines, f"{data_dir}/{raw_data_dir}/dialogues_{test_name}.txt")
-    
-    print("Respliting data...")
-    train_lines, valid_lines = resplit_data(total_lines)
-    
     print("Loading the tokenizer...")
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     special_tokens = {
@@ -134,12 +130,28 @@ if __name__=='__main__':
     }
     tokenizer.add_special_tokens(special_tokens)
     
-    if not os.path.isdir(f"{data_dir}/{processed_dir}"):
-        os.mkdir(f"{data_dir}/{processed_dir}")
+    print("Loading & Merging all datasets...")
+    train_dialogues = []
+    valid_dialogues = []
+    for data_name in dataset_list:
+        if data_name=='daily_dialog':
+            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_daily_dialog()
+        
+        train_dialogues += partial_train_dialogues
+        valid_dialogues += partial_valid_dialogues
     
-    print("Processing train utterances...")
-    save_data(train_lines, tokenizer, train_name)
-    print("Processing valid utterances...")
-    save_data(valid_lines, tokenizer, valid_name)            
+        print(f"#################### Analysis on {data_name} ####################")
+        print(f"The number of train dialogues: {len(train_dialogues)}")
+        print(f"The number of valid dialogues: {len(valid_dialogues)}")    
+        print(f"The number of train utterances: {train_utter_num}")    
+        print(f"The number of valid utterances: {valid_utter_num}")    
+    
+    if not os.path.isdir(f"{data_dir}"):
+        os.mkdir(f"{data_dir}")
+    
+    print("Saving train data...")
+    save_data(train_dialogues, train_name)
+    print("Saving validation data...")
+    save_data(valid_dialogues, valid_name)            
     
     print("Data preprocess finished!")

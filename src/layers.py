@@ -51,7 +51,7 @@ class DecoderLayer(nn.Module):
         self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.dropout)
         self.drop_out_3 = nn.Dropout(self.dropout)
 
-    def forward(self, x, e_output, e_mask,  d_mask):
+    def forward(self, x, e_output, e_mask, d_mask):
         x_1 = self.layer_norm_1(x) # (B, L, d_model)
         x = x + self.drop_out_1(
             self.masked_multihead_attention(x_1, x_1, x_1, mask=d_mask)
