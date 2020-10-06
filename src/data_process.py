@@ -19,6 +19,11 @@ eos = '<eos>'
 dataset_list = ['daily_dialog']
 dialogue_split_line = "[END OF DIALOGUE]"
 
+pre_quote = '’'
+end_marks = ['.', ',', '?', '!', '...']
+quotes = ['"', '\'']
+abbreviations = ['s', 'd', 't', 'm', 're', 'll', 've', 'S', 'D', 'T', 'M', 'Re', 'Ll', 'Ve']
+
 
 def load_daily_dialog():
     dataset = load_dataset('daily_dialog')
@@ -34,7 +39,7 @@ def load_daily_dialog():
     for i, dialogue in enumerate(tqdm(total_dialogues)):
         new_dialogue = []
         for utter in dialogue:
-            token_list = tokenizer.tokenize(utter.strip())
+            token_list = tokenizer.tokenize(utter.strip().replace(pre_quote, quotes[1]))
             token_list = trim_daily_dialog(token_list)
             text = tokenizer.convert_tokens_to_string(token_list)
             new_dialogue.append(text)
@@ -54,16 +59,8 @@ def load_daily_dialog():
     
 
 def trim_daily_dialog(token_list):
-    pre_quote = '’'
-    end_marks = ['.', ',', '?', '!', '...']
-    quotes = ['"', '\'']
-    abbreviations = ['s', 'd', 't', 'm', 're', 'll', 've', 'S', 'D', 'T', 'M', 'Re', 'Ll', 'Ve']
-    
     quote_count = 0
-    
     for i, token in enumerate(token_list):
-        token_list[i] = token.replace(pre_quote, quotes[1])
-        
         if space in token:
             if token[1:] in end_marks or token[1:] in abbreviations:
                 token_list[i] = token[1:]
