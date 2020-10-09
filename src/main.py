@@ -35,7 +35,6 @@ class Manager():
             'data_dir': 'data',
             'train_name': 'train',
             'valid_name': 'validation',
-            'processed_dir': 'processed',
             'sp_dir': 'trained_sp',
             'sp_prefix': 'sp',
             'dialogue_split_line': '[END OF DIALOGUE]',
