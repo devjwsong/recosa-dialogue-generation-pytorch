@@ -16,10 +16,10 @@ pad = '<pad>'
 unk = '<unk>'
 bos = '<bos>'
 eos = '<eos>'
-dataset_list = ['daily_dialog', 'empathetic_dialogues']
+dataset_list = ['daily_dialog', 'empathetic_dialogues', 'persona_chat', 'blended_skill_talk']
 dialogue_split_line = "[END OF DIALOGUE]"
 
-# For daily dialog
+# For all
 pre_quote = '’'
 end_marks = ['.', ',', '?', '!', '...']
 quotes = ['"', '\'']
@@ -29,8 +29,10 @@ abbreviations = ['s', 'd', 't', 'm', 're', 'll', 've', 'S', 'D', 'T', 'M', 'Re',
 exclude_symbol = "_conv"
 comma_symbol = "_comma_"
 
+# For persona chat
+url = "https://s3.amazonaws.com/datasets.huggingface.co/personachat/personachat_self_original.json"
+silence_symbol = "__ SILENCE __"
 
-#https://s3.amazonaws.com/datasets.huggingface.co/personachat/personachat_self_original.json
 
 def load_daily_dialog():
     dataset = load_dataset('daily_dialog')
@@ -44,7 +46,7 @@ def load_daily_dialog():
         new_dialogue = []
         for utter in dialogue:
             token_list = tokenizer.tokenize(utter.strip().replace(pre_quote, quotes[1]))
-            token_list = process_daily_dialog(token_list)
+            token_list = process_token_list(token_list)
             text = tokenizer.convert_tokens_to_string(token_list)
             new_dialogue.append(text)
             
@@ -84,7 +86,9 @@ def load_empathetic_dialogues():
         conv_id = total_conv_ids[i]
         speaker_idx = total_speaker_ids[i]
         
-        utter_modified = utter.replace(comma_symbol, ',')
+        utter_modified = utter.strip().replace(comma_symbol, ',')
+        new_token_list = process_token_list(tokenizer.tokenize(utter_modified))
+        text = tokenizer.convert_tokens_to_string(new_token_list)
         
         if exclude_symbol in utter:
             continue
@@ -94,10 +98,10 @@ def load_empathetic_dialogues():
             cur_speaker_idx = -1
 
         if cur_speaker_idx != speaker_idx:
-            conv_dict[conv_id].append(utter_modified)
+            conv_dict[conv_id].append(text)
             cur_speaker_idx = speaker_idx
         else:
-            conv_dict[conv_id][-1] += f" {utter_modified}"
+            conv_dict[conv_id][-1] += f" {text}"
     
     train_utter_num = 0
     valid_utter_num = 0
@@ -114,9 +118,90 @@ def load_empathetic_dialogues():
             valid_dialogues.append(utter_list)
             
     return train_dialogues, valid_dialogues, train_utter_num, valid_utter_num
+
+
+def load_persona_chat():
+    import urllib.request, json
+    with urllib.request.urlopen(url) as f:
+        dataset = json.loads(f.read().decode())
+        
+    train_data = dataset['train']
+    valid_data = dataset['valid']
+    total_data = train_data + valid_data
+    total_dialogues = []
+    
+    for obj in tqdm(total_data):
+        dialogue = obj['utterances'][-1]['history']
+        new_dialogue = []
+        
+        for i, utter in enumerate(dialogue):
+            if utter.strip() != silence_symbol:
+                token_list = tokenizer.tokenize(utter.strip())
+                new_token_list = process_token_list(token_list)
+                text = tokenizer.convert_tokens_to_string(new_token_list)
+                new_dialogue.append(text)
+        
+        total_dialogues.append(new_dialogue)
+        
+    train_utter_num = 0
+    valid_utter_num = 0
+    train_dialogues = total_dialogues[:int(len(total_dialogues)*train_frac)]
+    valid_dialogues = total_dialogues[int(len(total_dialogues)*train_frac):]
+    
+    for dialogue in train_dialogues:
+        train_utter_num += len(dialogue)
+        
+    for dialogue in valid_dialogues:
+        valid_utter_num += len(dialogue)
+    
+    return train_dialogues, valid_dialogues, train_utter_num, valid_utter_num
+
+
+def load_blended_skill_talk():
+    dataset = load_dataset('blended_skill_talk')
+    data_train = dataset['train']
+    data_valid = dataset['validation']
+    data_test = dataset['test']
+    
+    total_previous_utterance = data_train['previous_utterance'] + data_valid['previous_utterance'] + data_test['previous_utterance']
+    total_free_messages = data_train['free_messages'] + data_valid['free_messages'] + data_test['free_messages']
+    total_guided_messages = data_train['guided_messages'] + data_valid['guided_messages'] + data_test['guided_messages']
+
+    total_dialogues = []
+    for i, free_message in enumerate(tqdm(total_free_messages)):
+        free_message_list = [utter.strip() for utter in free_message if len(utter.strip())>0]
+        guided_message_list = [utter.strip() for utter in total_guided_messages[i] if len(utter.strip())>0]
+        dialogue = total_previous_utterance[i]
+        
+        for j in range(len(free_message_list)):
+            token_list = process_token_list(tokenizer.tokenize(free_message_list[j]))
+            text = tokenizer.convert_tokens_to_string(token_list)
+            dialogue.append(text)
+            
+            if j < len(guided_message_list):
+                token_list = process_token_list(tokenizer.tokenize(guided_message_list[j]))
+                text = tokenizer.convert_tokens_to_string(token_list)
+                dialogue.append(text)
+            
+        total_dialogues.append(dialogue)
+        
+    train_utter_num = 0
+    valid_utter_num = 0
+    train_dialogues = total_dialogues[:int(len(total_dialogues)*train_frac)]
+    valid_dialogues = total_dialogues[int(len(total_dialogues)*train_frac):]
+    
+    for dialogue in train_dialogues:
+        train_utter_num += len(dialogue)
+        
+    for dialogue in valid_dialogues:
+        valid_utter_num += len(dialogue)
+    
+    return train_dialogues, valid_dialogues, train_utter_num, valid_utter_num
     
 
-def process_daily_dialog(token_list):
+def process_token_list(token_list):
+    token_list[0] = token_list[0].capitalize()
+    
     quote_count = 0
     for i, token in enumerate(token_list):
         if space in token:
@@ -140,9 +225,13 @@ def process_daily_dialog(token_list):
         if token in end_marks or token[1:] in end_marks:
             if i<len(token_list)-1:
                 if token_list[i+1][0] != space:
-                    token_list[i+1] = space + token_list[i+1]
+                    token_list[i+1] = space + token_list[i+1].capitalize()
+                else:
+                    token_list[i+1] = space + token_list[i+1][1:].capitalize()
                 
     new_token_list = [token for token in token_list if token != space and len(token)>0]
+    if new_token_list[-1] not in end_marks:
+        new_token_list.append(end_marks[0])
         
     return new_token_list
 
@@ -199,6 +288,10 @@ if __name__=='__main__':
             partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_daily_dialog()
         elif data_name == 'empathetic_dialogues':
             partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_empathetic_dialogues()
+        elif data_name == 'persona_chat':
+            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_persona_chat()
+        elif data_name == 'blended_skill_talk':
+            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_blended_skill_talk()
         
         train_dialogues += partial_train_dialogues
         valid_dialogues += partial_valid_dialogues
@@ -209,8 +302,8 @@ if __name__=='__main__':
         print(f"The number of train utterances: {train_utter_num}")    
         print(f"The number of valid utterances: {valid_utter_num}")
         
-        total_train_dialogue_num += len(train_dialogues)
-        total_valid_dialogue_num += len(valid_dialogues)
+        total_train_dialogue_num = len(train_dialogues)
+        total_valid_dialogue_num = len(valid_dialogues)
         total_train_utter_num += train_utter_num
         total_valid_utter_num += valid_utter_num
     
