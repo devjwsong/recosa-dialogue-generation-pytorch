@@ -136,7 +136,7 @@ data/
 saved_models/
 
 # Notebook
-run.ipynb
+*.ipynb
 nohup.out
 
 # Unnecessary source files

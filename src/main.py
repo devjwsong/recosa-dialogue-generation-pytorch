@@ -19,9 +19,9 @@ class Manager():
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'learning_rate': 0.0005,
-            'batch_size': 24,
+            'batch_size': 20,
             'num_epochs': 10,
-            'max_len': 256,
+            'max_len': 300,
             'num_heads': 8,
             'encoder_num_layers': 6,
             'decoder_num_layers': 6,
@@ -29,7 +29,7 @@ class Manager():
             'd_mid': 768,
             'd_ff': 2048,
             'dropout': 0.1,
-            'max_turn': 35,
+            'max_turn': 40,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',
             'data_dir': 'data',
@@ -141,7 +141,7 @@ class Manager():
                 state_dict = {
                     'model_state_dict': self.model.state_dict(),
                     'optim_state_dict': self.optim.state_dict(),
-                    'loss': self.best_loss
+                    'loss': self.best_loss,
                 }
               
                 torch.save(state_dict, f"{self.config['ckpt_dir']}/best_ckpt.tar")
