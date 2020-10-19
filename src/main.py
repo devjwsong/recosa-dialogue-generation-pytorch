@@ -69,12 +69,27 @@ class Manager():
             gpt2.resize_token_embeddings(num_ori_tokens + num_new_tokens)
             embedding = gpt2.transformer.wte
         
-        # Load model & optimizer      
-        print("Loading the model and optimizer...")
+        # Load model    
+        print("Loading the model...")
         self.model = ReCoSaTransformer(self.config, embedding=embedding).to(self.config['device'])
-        self.optim = torch.optim.AdamW(self.model.parameters(), lr=self.config['learning_rate'])
-        self.best_loss = sys.float_info.max
-        
+            
+        if mode == 'train':
+            # Load loss function
+            print("Loading loss function...")
+            self.criterion = nn.NLLLoss()
+            
+            # Load optimizer
+            print("Loading the optimizer...")
+            self.optim = torch.optim.AdamW(self.model.parameters(), lr=self.config['learning_rate'])
+            self.best_loss = sys.float_info.max
+            
+            # Load train & valid dataset
+            print("Loading train & valid data...")
+            train_set = CustomDataset('train', self.config)
+            valid_set = CustomDataset('valid', self.config)
+            self.train_loader = DataLoader(train_set, shuffle=True, batch_size=self.config['batch_size'])
+            self.valid_loader = DataLoader(valid_set, shuffle=True, batch_size=self.config['batch_size'])
+            
         if not os.path.exists(self.config['ckpt_dir']):
             os.mkdir(self.config['ckpt_dir'])
         
@@ -89,18 +104,6 @@ class Manager():
         else:
             print("Initializing the model...")
             self.model.init_model()
-            
-        if mode == 'train':
-            # Load loss function
-            print("Loading loss function...")
-            self.criterion = nn.NLLLoss()
-            
-            # Load train & valid dataset
-            print("Loading train & valid data...")
-            train_set = CustomDataset('train', self.config)
-            valid_set = CustomDataset('valid', self.config)
-            self.train_loader = DataLoader(train_set, shuffle=True, batch_size=self.config['batch_size'])
-            self.valid_loader = DataLoader(valid_set, shuffle=True, batch_size=self.config['batch_size'])
               
         print("Setting finished.")
               
