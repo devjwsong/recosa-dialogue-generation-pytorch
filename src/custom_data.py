@@ -39,8 +39,13 @@ class CustomDataset(Dataset):
                     src_input = self.process_src(src_sent, config['max_len'], config['bos_id'], config['eos_id'], config['pad_id'])
                     trg_input, trg_output = self.process_trg(trg_sent, config['max_len'], config['bos_id'], config['eos_id'], config['pad_id'])
                     
-                    history[num_turn] = src_input
-                    e_mask = self.make_encoder_mask(num_turn, config['max_turn'])
+                    if num_turn < config['max_turn']:
+                        history[num_turn] = src_input
+                        e_mask = self.make_encoder_mask(num_turn, config['max_turn'])
+                    else:
+                        history = history[1:] + [src_input]
+                        e_mask = self.make_encoder_mask(config['max_turn'], config['max_turn'])
+                    
                     num_turn += 1
                     
                     self.src_inputs.append(history)
@@ -92,7 +97,7 @@ class CustomDataset(Dataset):
             self.e_masks[idx], self.d_masks[idx]
     
     def make_encoder_mask(self, num_turn, max_turn):
-        e_mask = [1 for i in range(num_turn+1)] + [0 for i in range(max_turn-num_turn-1)]
+        e_mask = [1 for i in range(num_turn+1)] + [0 for i in range(max_turn-num_turn-1)]  # (T)
         
         return e_mask
     
