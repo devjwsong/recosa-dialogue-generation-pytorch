@@ -29,7 +29,7 @@ class ReCoSaTransformer(nn.Module):
         else:
             self.embedding = nn.Embedding(self.config['vocab_size'], self.config['d_model'])
         self.word_pembedding = PositionalEncoder(self.config['max_len'], self.config['d_model'], self.config['device'])
-        self.turn_pembedding = PositionalEncoder(self.config['max_turn'], self.config['d_model'], self.config['device'])
+        self.time_pembedding = PositionalEncoder(self.config['max_time'], self.config['d_model'], self.config['device'])
         
         # Word Level LSTM components
         self.word_level_rnn = nn.GRU(
@@ -90,7 +90,7 @@ class ReCoSaTransformer(nn.Module):
 
         batch_size = src_emb.shape[0]
         src_emb = last_hiddens.view(batch_size, -1, d_model)  # (B, T, d_model)
-        src_emb = self.turn_pembedding(src_emb, cal='concat')  # (B, T, 2*d_model)
+        src_emb = self.time_pembedding(src_emb, cal='concat')  # (B, T, 2*d_model)
         
         return src_emb  # (B, T, 2*d_model)
     

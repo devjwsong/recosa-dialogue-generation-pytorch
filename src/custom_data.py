@@ -25,26 +25,26 @@ class CustomDataset(Dataset):
         
         print(f"Processing {data_name}_id.txt...")
         init = [config['pad_id']] * config['max_len']
-        history = [init for t in range(config['max_turn'])]  # (T, L)
+        history = [init for t in range(config['max_time'])]  # (T, L)
         num_turn = 0
         for i, line in enumerate(tqdm(lines)):
             if line.strip() == config['dialogue_split_line']:
-                history = [init for t in range(config['max_turn'])]
+                history = [init for t in range(config['max_time'])]
                 num_turn = 0
             elif i+1<len(lines) and lines[i+1].strip() != config['dialogue_split_line']:                    
-                if num_turn < config['max_turn']:
+                if num_turn < config['max_time']:
                     src_sent = [int(token) for token in line.strip().split(' ')]
                     trg_sent = [int(token) for token in lines[i+1].strip().split(' ')]
 
                     src_input = self.process_src(src_sent, config['max_len'], config['bos_id'], config['eos_id'], config['pad_id'])
                     trg_input, trg_output = self.process_trg(trg_sent, config['max_len'], config['bos_id'], config['eos_id'], config['pad_id'])
                     
-                    if num_turn < config['max_turn']:
+                    if num_turn < config['max_time']:
                         history[num_turn] = src_input
-                        e_mask = self.make_encoder_mask(num_turn, config['max_turn'])
+                        e_mask = self.make_encoder_mask(num_turn, config['max_time'])
                     else:
                         history = history[1:] + [src_input]
-                        e_mask = self.make_encoder_mask(config['max_turn'], config['max_turn'])
+                        e_mask = self.make_encoder_mask(config['max_time'], config['max_time'])
                     
                     num_turn += 1
                     
@@ -96,8 +96,8 @@ class CustomDataset(Dataset):
         return self.src_inputs[idx], self.trg_inputs[idx], self.trg_outputs[idx], \
             self.e_masks[idx], self.d_masks[idx]
     
-    def make_encoder_mask(self, num_turn, max_turn):
-        e_mask = [1 for i in range(num_turn+1)] + [0 for i in range(max_turn-num_turn-1)]  # (T)
+    def make_encoder_mask(self, num_turn, max_time):
+        e_mask = [1 for i in range(num_turn+1)] + [0 for i in range(max_time-num_turn-1)]  # (T)
         
         return e_mask
     

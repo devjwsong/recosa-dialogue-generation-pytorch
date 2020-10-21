@@ -29,7 +29,7 @@ class Manager():
             'd_mid': 768,
             'd_ff': 2048,
             'dropout': 0.1,
-            'max_turn': 20,
+            'max_time': 20,
             'nucleus_p': 0.95,
             'ckpt_dir': 'saved_models',
             'data_dir': 'data',
@@ -190,11 +190,11 @@ class Manager():
         with torch.no_grad():
             # Diagloue history
             init = [self.config['pad_id']] * self.config['max_len']
-            history = [init for t in range(self.config['max_turn'])]  # (T, L)
+            history = [init for t in range(self.config['max_time'])]  # (T, L)
             
             utter = None
             output_ids = None
-            for t in range(self.config['max_turn']):
+            for t in range(self.config['max_time']):
                 if t % 2 == 0:
                     utter = input("You: ")
                     
@@ -214,7 +214,7 @@ class Manager():
                     src_input = torch.LongTensor(history).unsqueeze(0).to(self.config['device'])  # (B, T, L)
 
                     src_emb = self.model.src_embed(src_input)  # (B, L, 2*d_model)
-                    e_mask = [1 for i in range(t+1)] + [0 for i in range(self.config['max_turn']-t-1)]
+                    e_mask = [1 for i in range(t+1)] + [0 for i in range(self.config['max_time']-t-1)]
                     e_mask = torch.BoolTensor(e_mask).unsqueeze(0).unsqueeze(0).to(self.config['device'])  # (B, 1, T)
                     e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 
@@ -233,7 +233,7 @@ class Manager():
                         
                     history[t] = sent
 
-                if t == self.config['max_turn']-1:
+                if t == self.config['max_time']-1:
                     print("This is the last turn.")
 
     def nucleus_sampling(self, e_output, e_mask):
