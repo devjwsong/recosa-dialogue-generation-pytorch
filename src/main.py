@@ -19,7 +19,7 @@ class Manager():
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             'learning_rate': 0.0005,
-            'batch_size': 20,
+            'batch_size': 28,
             'num_epochs': 20,
             'max_len': 300,
             'num_heads': 8,
@@ -35,8 +35,6 @@ class Manager():
             'data_dir': 'data',
             'train_name': 'train',
             'valid_name': 'validation',
-            'sp_dir': 'trained_sp',
-            'sp_prefix': 'sp',
             'dialogue_split_line': '[END OF DIALOGUE]',
             'end_command': 'abort!',
             'bos': '<bos>',
