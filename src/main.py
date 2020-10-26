@@ -18,8 +18,8 @@ class Manager():
         print("Setting the configurations...")
         self.config = {
             'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-            'learning_rate': 0.0005,
-            'batch_size': 28,
+            'learning_rate': 5e-4,
+            'batch_size': 26,
             'num_epochs': 20,
             'max_len': 300,
             'num_heads': 8,
@@ -30,13 +30,13 @@ class Manager():
             'd_ff': 2048,
             'dropout': 0.1,
             'max_time': 20,
-            'nucleus_p': 0.95,
+            'nucleus_p': 0.9,
             'ckpt_dir': 'saved_models',
             'data_dir': 'data',
             'train_name': 'train',
             'valid_name': 'validation',
             'dialogue_split_line': '[END OF DIALOGUE]',
-            'end_command': 'abort!',
+            'end_command': 'Abort!',
             'bos': '<bos>',
             'eos': '<eos>',
             'pad': '<pad>',
@@ -97,8 +97,10 @@ class Manager():
             print("Loading checkpoint...")
             checkpoint = torch.load(f"{self.config['ckpt_dir']}/{ckpt_name}")
             self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.optim.load_state_dict(checkpoint['optim_state_dict'])
-            self.best_loss = checkpoint['loss']
+            
+            if args.mode == 'train':
+                self.optim.load_state_dict(checkpoint['optim_state_dict'])
+                self.best_loss = checkpoint['loss']
         else:
             print("Initializing the model...")
             self.model.init_model()
@@ -180,7 +182,7 @@ class Manager():
         return mean_valid_loss
         
               
-    def test(self):
+    def inference(self):
         print("Let's start!")
         print(f"If you want to quit the conversation, please type \"{self.config['end_command']}\".")
         self.model.eval()
@@ -282,13 +284,13 @@ class Manager():
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', required=True, help="Train or test?")
+    parser.add_argument('--mode', required=True, help="Train or inference?")
     parser.add_argument('--use_gpt', required=False, help='Using GPT2 embedding layer?')
     parser.add_argument('--ckpt_name', required=False, help="Best checkpoint file.")
               
     args = parser.parse_args()
     
-    assert args.mode == 'train' or args.mode=='test', print("Please specify a correct mode name, 'train' or 'test'.")
+    assert args.mode == 'train' or args.mode=='inference', print("Please specify a correct mode name, 'train' or 'inference'.")
               
     if args.mode == 'train':
         if args.ckpt_name is not None:
@@ -298,9 +300,9 @@ if __name__=='__main__':
               
         manager.train()
         
-    elif args.mode == 'test':
+    elif args.mode == 'inference':
         assert args.ckpt_name is not None, "Please specify the trained model checkpoint."
         
         manager = Manager(args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
         
-        manager.test()
+        manager.inference()
