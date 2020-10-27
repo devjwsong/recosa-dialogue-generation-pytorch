@@ -26,7 +26,6 @@ class Manager():
             'encoder_num_layers': 6,
             'decoder_num_layers': 6,
             'd_model': 512,
-            'd_mid': 768,
             'd_ff': 2048,
             'dropout': 0.1,
             'max_time': 20,
