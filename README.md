@@ -57,7 +57,7 @@ The description of each variable is as follows. (Those not introduced in below t
 
 By default, I propose the codes for downloading the datasets and preprocessing.
 
-There are $4$ types of the default datasets as follows.
+There are 4 types of the default datasets as follows.
 
 <br/>
 
