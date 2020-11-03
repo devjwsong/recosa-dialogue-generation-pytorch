@@ -15,7 +15,7 @@ import json
 
 
 class Manager():
-    def __init__(self, config_path, mode, use_gpt=False, ckpt_name=None):
+    def __init__(self, config_path, mode, ckpt_name=None):
         print("Setting the configurations...")
         with open(config_path, 'r') as f:
             self.config = json.load(f)
@@ -43,7 +43,7 @@ class Manager():
         self.config['pad_id'] = vocab[self.config['pad']]
         
         embedding = None
-        if use_gpt:
+        if self.config['use_gpt_embedding']:
             gpt2 = GPT2LMHeadModel.from_pretrained('gpt2')
             num_ori_tokens = gpt2.transformer.wte.num_embeddings
             gpt2.resize_token_embeddings(num_ori_tokens + num_new_tokens)
@@ -268,7 +268,6 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_path', required=True, help="The path to configuration file.")
     parser.add_argument('--mode', required=True, help="Train or inference?")
-    parser.add_argument('--use_gpt', required=False, help='Using GPT2 embedding layer?')
     parser.add_argument('--ckpt_name', required=False, help="Best checkpoint file.")
               
     args = parser.parse_args()
@@ -277,15 +276,15 @@ if __name__=='__main__':
               
     if args.mode == 'train':
         if args.ckpt_name is not None:
-            manager = Manager(args.config_path, args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
+            manager = Manager(args.config_path, args.mode, ckpt_name=args.ckpt_name)
         else:
-            manager = Manager(args.config_path, args.mode, use_gpt=args.use_gpt)
+            manager = Manager(args.config_path, args.mode)
               
         manager.train()
         
     elif args.mode == 'inference':
         assert args.ckpt_name is not None, "Please specify the trained model checkpoint."
         
-        manager = Manager(args.config_path, args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
+        manager = Manager(args.config_path, args.mode, ckpt_name=args.ckpt_name)
         
         manager.inference()

@@ -24,5 +24,6 @@
     "ckpt_dir": "saved_models",
     "end_command": "Abort!",
     "gru_num_layers": 2,
-    "gru_dropout": 0.1
+    "gru_dropout": 0.1,
+    "use_gpt_embedding": true
 }
