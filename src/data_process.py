@@ -3,23 +3,14 @@ from transformers import *
 from datasets import *
 
 import torch
+import argparse
 import os
+import json
 
-
-# Parameters for data
-data_dir = 'data'
-train_name = 'train'
-valid_name = 'validation'
-train_frac = 0.85
-space = 'Ġ'
-pad = '<pad>'
-unk = '<unk>'
-bos = '<bos>'
-eos = '<eos>'
-dataset_list = ['daily_dialog', 'empathetic_dialogues', 'persona_chat', 'blended_skill_talk']
-dialogue_split_line = "[END OF DIALOGUE]"
 
 # For all
+dataset_list = ['daily_dialog', 'empathetic_dialogues', 'persona_chat', 'blended_skill_talk']
+space = 'Ġ'
 pre_quote = '’'
 end_marks = ['.', ',', '?', '!', '...']
 quotes = ['"', '\'']
@@ -30,11 +21,11 @@ exclude_symbol = "_conv"
 comma_symbol = "_comma_"
 
 # For persona chat
-url = "https://s3.amazonaws.com/datasets.huggingface.co/personachat/personachat_self_original.json"
+persona_chat_url = "https://s3.amazonaws.com/datasets.huggingface.co/personachat/personachat_self_original.json"
 silence_symbol = "__ SILENCE __"
 
 
-def load_daily_dialog():
+def load_daily_dialog(tokenizer, train_frac):
     dataset = load_dataset('daily_dialog')
     train_dialogues = dataset['train']['dialog']
     valid_dialogues = dataset['validation']['dialog']
@@ -66,7 +57,7 @@ def load_daily_dialog():
     return train_dialogues, valid_dialogues, train_utter_num, valid_utter_num
     
     
-def load_empathetic_dialogues():
+def load_empathetic_dialogues(tokenizer, train_frac):
     dataset = load_dataset('empathetic_dialogues')
     train_data = dataset['train']
     valid_data = dataset['validation']
@@ -120,9 +111,9 @@ def load_empathetic_dialogues():
     return train_dialogues, valid_dialogues, train_utter_num, valid_utter_num
 
 
-def load_persona_chat():
+def load_persona_chat(tokenizer, train_frac):
     import urllib.request, json
-    with urllib.request.urlopen(url) as f:
+    with urllib.request.urlopen(persona_chat_url) as f:
         dataset = json.loads(f.read().decode())
         
     train_data = dataset['train']
@@ -157,7 +148,7 @@ def load_persona_chat():
     return train_dialogues, valid_dialogues, train_utter_num, valid_utter_num
 
 
-def load_blended_skill_talk():
+def load_blended_skill_talk(tokenizer, train_frac):
     dataset = load_dataset('blended_skill_talk')
     data_train = dataset['train']
     data_valid = dataset['validation']
@@ -236,7 +227,7 @@ def process_token_list(token_list):
     return new_token_list
 
 
-def save_data(dialogues, name):
+def save_data(dialogues, name, dialogue_split_line, data_dir):
     texts = []
     ids = []
     for dialogue in tqdm(dialogues):
@@ -264,14 +255,22 @@ def save_data(dialogues, name):
 
 
 if __name__=='__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config_path', required=True, help="The path to configuration file.")
+    
+    args = parser.parse_args()
+    
+    print("Loading configurations...")
+    with open(args.config_path, 'r') as f:
+        config = json.load(f)
+    
     print("Loading the tokenizer...")
-    config = GPT2Config()
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     special_tokens = {
-        'bos_token': bos,
-        'eos_token': eos,
-        'pad_token': pad,
-        'unk_token': unk
+        'bos_token': config['bos'],
+        'eos_token': config['eos'],
+        'pad_token': config['pad'],
+        'unk_token': config['unk']
     }
     tokenizer.add_special_tokens(special_tokens)
     
@@ -285,13 +284,13 @@ if __name__=='__main__':
     for data_name in dataset_list:
         print(f"Processing {data_name}...")
         if data_name == 'daily_dialog':
-            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_daily_dialog()
+            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_daily_dialog(tokenizer, config['train_frac'])
         elif data_name == 'empathetic_dialogues':
-            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_empathetic_dialogues()
+            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_empathetic_dialogues(tokenizer, config['train_frac'])
         elif data_name == 'persona_chat':
-            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_persona_chat()
+            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_persona_chat(tokenizer, config['train_frac'])
         elif data_name == 'blended_skill_talk':
-            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_blended_skill_talk()
+            partial_train_dialogues, partial_valid_dialogues, train_utter_num, valid_utter_num = load_blended_skill_talk(tokenizer, config['train_frac'])
         
         train_dialogues += partial_train_dialogues
         valid_dialogues += partial_valid_dialogues
@@ -307,13 +306,13 @@ if __name__=='__main__':
         total_train_utter_num += train_utter_num
         total_valid_utter_num += valid_utter_num
     
-    if not os.path.isdir(f"{data_dir}"):
-        os.mkdir(f"{data_dir}")
+    if not os.path.isdir(f"{config['data_dir']}"):
+        os.mkdir(f"{config['data_dir']}")
     
     print("Saving train data...")
-    save_data(train_dialogues, train_name)
+    save_data(train_dialogues, config['train_name'], config['dialogue_split_line'], config['data_dir'])
     print("Saving validation data...")
-    save_data(valid_dialogues, valid_name)            
+    save_data(valid_dialogues, config['valid_name'], config['dialogue_split_line'], config['data_dir'])            
     
     print("Data preprocess finished!")
 

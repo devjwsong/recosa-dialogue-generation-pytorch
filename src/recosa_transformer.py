@@ -36,7 +36,7 @@ class ReCoSaTransformer(nn.Module):
             input_size=self.config['d_model'],
             hidden_size=self.config['hidden_size'],
             num_layers=self.config['gru_num_layers'],
-            dropout=self.config['gru_dropout'],
+            dropout=(0.0 if self.config['gru_num_layers'] == 1 else self.config['gru_dropout']),
             batch_first=True,
         )
         
@@ -87,7 +87,7 @@ class ReCoSaTransformer(nn.Module):
             src_emb = self.embedding_linear(src_emb)  # (B, T, L, d_model)
         max_len, d_model = src_emb.shape[2], src_emb.shape[3]
         last_hiddens = self.word_level_rnn(src_emb.view(-1, max_len, d_model))[1][-1]  # (B*T, d_model)
-
+        
         batch_size = src_emb.shape[0]
         src_emb = last_hiddens.view(batch_size, -1, d_model)  # (B, T, d_model)
         src_emb = self.time_pembedding(src_emb, cal='concat')  # (B, T, 2*d_model)

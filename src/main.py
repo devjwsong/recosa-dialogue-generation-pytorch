@@ -11,38 +11,21 @@ import numpy as np
 import argparse
 import time
 import copy
+import json
 
 
 class Manager():
-    def __init__(self, mode, use_gpt=False, ckpt_name=None):
+    def __init__(self, config_path, mode, use_gpt=False, ckpt_name=None):
         print("Setting the configurations...")
-        self.config = {
-            'device': torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-            'learning_rate': 5e-4,
-            'batch_size': 26,
-            'num_epochs': 20,
-            'max_len': 300,
-            'num_heads': 8,
-            'encoder_num_layers': 6,
-            'decoder_num_layers': 6,
-            'd_model': 512,
-            'd_ff': 2048,
-            'dropout': 0.1,
-            'max_time': 20,
-            'nucleus_p': 0.9,
-            'ckpt_dir': 'saved_models',
-            'data_dir': 'data',
-            'train_name': 'train',
-            'valid_name': 'validation',
-            'dialogue_split_line': '[END OF DIALOGUE]',
-            'end_command': 'Abort!',
-            'bos': '<bos>',
-            'eos': '<eos>',
-            'pad': '<pad>',
-        }
-        self.config['gru_num_layers'] =  2
+        with open(config_path, 'r') as f:
+            self.config = json.load(f)
+            
+        if self.config['device'] == "cuda":
+            self.config['device'] = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        elif self.config['device'] == "cpu":
+            self.config['device'] = torch.device('cpu')
+            
         self.config['hidden_size'] = self.config['d_model']
-        self.config['gru_dropout'] = 0.3
         
         # Tokenizer & Vocab
         print("Loading tokenizer & embedding...")
@@ -73,7 +56,7 @@ class Manager():
         if mode == 'train':
             # Load loss function
             print("Loading loss function...")
-            self.criterion = nn.NLLLoss()
+            self.criterion = nn.NLLLoss(ignore_index=self.config['pad_id'])
             
             # Load optimizer
             print("Loading the optimizer...")
@@ -283,6 +266,7 @@ class Manager():
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--config_path', required=True, help="The path to configuration file.")
     parser.add_argument('--mode', required=True, help="Train or inference?")
     parser.add_argument('--use_gpt', required=False, help='Using GPT2 embedding layer?')
     parser.add_argument('--ckpt_name', required=False, help="Best checkpoint file.")
@@ -293,15 +277,15 @@ if __name__=='__main__':
               
     if args.mode == 'train':
         if args.ckpt_name is not None:
-            manager = Manager(args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
+            manager = Manager(args.config_path, args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
         else:
-            manager = Manager(args.mode, use_gpt=args.use_gpt)
+            manager = Manager(args.config_path, args.mode, use_gpt=args.use_gpt)
               
         manager.train()
         
     elif args.mode == 'inference':
         assert args.ckpt_name is not None, "Please specify the trained model checkpoint."
         
-        manager = Manager(args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
+        manager = Manager(args.config_path, args.mode, use_gpt=args.use_gpt, ckpt_name=args.ckpt_name)
         
         manager.inference()
