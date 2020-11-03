@@ -15,36 +15,39 @@ The details of structure is as follows.
 
 ### Configurations
 
-You can set various hyperparameters by modifying `self.config` dictionary in `src/main.py` file.
+You can set various arguments by modifying `config.json` in the top directory.
 
 The description of each variable is as follows. (Those not introduced in below table are set automatically and should not be changed.)
 
-| Argument              | Type           | Description                                                  | Default                                                      |
-| --------------------- | -------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `device`              | `torch.device` | The device type. (CUDA or CPU)                               | `torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')` |
-| `learning_rate`       | `float`        | The learning rate.                                           | `5e-4`                                                       |
-| `batch_size`          | `int`          | The batch size.                                              | `26`                                                         |
-| `num_epochs`          | `int`          | The total number of iterations.                              | `20`                                                         |
-| `max_len`             | `int`          | The maximum length of a sentence.                            | `300`                                                        |
-| `num_heads`           | `int`          | The number of heads for Multi-head attention.                | `8`                                                          |
-| `encoder_num_layers`  | `int`          | The number of layers in the encoder.                         | `6`                                                          |
-| `decoder_num_layers`  | `int`          | The number of layers in the decoder.                         | `6`                                                          |
-| `d_model`             | `int`          | The size of hidden states in the model.                      | `512`                                                        |
-| `d_ff`                | `int`          | The size of intermediate  hidden states in the feed-forward layer. | `2048`                                                       |
-| `dropout`             | `float`        | The dropout rate.                                            | `0.1`                                                        |
-| `max_time`            | `int`          | The maximum length of the dialogue history to be attended.   | `20`                                                         |
-| `nucleus_p`           | `float`        | The ratio of the probability mass for top-$p$ sampling(nucleus sampling). | `0.9`                                                        |
-| `ckpt_dir`            | `str`          | The path for saved checkpoints.                              | `saved_model`                                                |
-| `data_dir`            | `str`          | Name of the parent directory where data files are stored.    | `'data'`                                                     |
-| `train_name`          | `str`          | The prefix of the train data files' name.                    | `train`                                                      |
-| `valid_name`          | `str`          | The prefix of the validation data files' name.               | `validation`                                                 |
-| `dialogue_split_line` | `str`          | The line for splitting each dialogue in the preprocessed data files. | `[END OF DIALOGUE]`                                          |
-| `end_command`         | `str`          | The command to stop the conversation when inferencing.       | `Abort!`                                                     |
-| `bos`                 | `str`          | The BOS(Beginning Of Sentence) token.                        | `<bos>`                                                      |
-| `eos`                 | `str`          | The EOS(End Of Sentence) token.                              | `<eos>`                                                      |
-| `pad`                 | `str`          | The padding token.                                           | `<pad>`                                                      |
-| `gru_num_layers`      | `int`          | The number of layers in the word-level GRU.                  | `2`                                                          |
-| `gru_dropout`         | `float`        | The dropout rate for GRU.                                    | `0.3`                                                        |
+| Argument              | Type              | Description                                                  | Default               |
+| --------------------- | ----------------- | ------------------------------------------------------------ | --------------------- |
+| `data_dir`            | `String`          | The name of the parent directory where data files are stored. | `"data"`              |
+| `train_name`          | `String`          | The prefix of the train data files' name.                    | `"train"`             |
+| `valid_name`          | `String`          | The prefix of the validation data files' name.               | `"validation"`        |
+| `train_frac`          | `Number`(`float`) | The ratio of the conversations to be included in the train set. | `0.85`                |
+| `pad`                 | `String`          | The padding token.                                           | `"<pad>"`             |
+| `unk`                 | `String`          | The unknown token.                                           | `"<unk>"`             |
+| `bos`                 | `String`          | The BOS(Beginning Of Sentence) token.                        | `"<bos>"`             |
+| `eos`                 | `String`          | The EOS(End Of Sentence) token.                              | `"<eos>"`             |
+| `dialogue_split_line` | `String`          | The line for splitting each dialogue in the preprocessed data files. | `"[END OF DIALOGUE]"` |
+| `device`              | `String`          | The device type. (`"cuda"` or `"cpu"`) If this is set to `"cuda"`, then the device configuration is set to `torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')`. If this variable is `"cpu"`, then the setting becomes just `torch.devcie('cpu')`. | `"cuda"`              |
+| `learning_rate`       | `Number`(`float`) | The learning rate.                                           | `5e-4`                |
+| `batch_size`          | `Number`(`int`)   | The batch size.                                              | `26`                  |
+| `num_epochs`          | `Number`(`int`)   | The total number of iterations.                              | `20`                  |
+| `max_len`             | `Number`(`int`)   | The maximum length of a sentence.                            | `128`                 |
+| `num_heads`           | `Number`(`int`)   | The number of heads for Multi-head attention.                | `8`                   |
+| `encoder_num_layers`  | `Number`(`int`)   | The number of layers in the encoder.                         | `6`                   |
+| `decoder_num_layers`  | `Number`(`int`)   | The number of layers in the decoder.                         | `6`                   |
+| `d_model`             | `Number`(`int`)   | The size of hidden states in the model.                      | `512`                 |
+| `d_ff`                | `Number`(`int`)   | The size of intermediate  hidden states in the feed-forward layer. | `2048`                |
+| `dropout`             | `Number`(`float`) | The dropout rate.                                            | `0.1`                 |
+| `max_time`            | `Number`(`int`)   | The maximum length of the dialogue history to be attended.   | `20`                  |
+| `nucleus_p`           | `Number`(`float`) | The ratio of the probability mass for top-$p$ sampling(nucleus sampling). | `0.9`                 |
+| `ckpt_dir`            | `String`          | The path for saved checkpoints.                              | `"saved_models"`      |
+| `end_command`         | `String`          | The command to stop the conversation when inferencing.       | `"Abort!"`            |
+| `gru_num_layers`      | `Number`(`int`)   | The number of layers in the word-level GRU.                  | `2`                   |
+| `gru_dropout`         | `Number`(`float`) | The dropout rate for GRU.                                    | `0.3`                 |
+| `use_gpt_embedding`   | `Boolean`         | This determines whether the model uses the pre-trained GPT2's embedding layer. If it is `false`, then the embedding layer is trained from the beginning using `nn.Embedding`. | `true`                |
 
 <br/>
 
@@ -93,11 +96,13 @@ But they are just for checking how the trimmed utterances look like, so they are
 
 2. Download & Preprocess all datasets. (If you want to use your own datasets, skip this step.)
 
-   The variables `data_dir`, `train_name`, `valid_name`, `pad`, `bos`, `eos`, and `dialogue_split_line` must math with the configuration setting in `src/main.py`, otherwise it will cause error.
-
    ```shell
-   python src/data_process.py
+   python src/data_process.py --config_path=PATH_TO_CONFIGURATION_FILE
    ```
+
+   - `--config_path`: This indicates the path to the configuration file. (default: `"config.json"`)
+
+   <br/>
 
    Then there would be `{data_dir}` directory which has corresponding train & validation data files.
 
@@ -114,22 +119,19 @@ But they are just for checking how the trimmed utterances look like, so they are
 3. Run the following command to train the model.
 
    ```shell
-   python src/main.py --mode='train' --use_gpt=TRUE OR FALSE --ckpt_name=CHECKPOINT_NAME
+   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='train' --use_gpt=TRUE OR FALSE --ckpt_name=CHECKPOINT_NAME
    ```
 
    - `--mode`: You have to specify the mode among two options, 'train' or 'inference'.
-   - `--use_gpt`: This determines whether the model uses the pre-trained GPT2's embedding layer. If it is `False`, then the embedding layer is trained from the beginning using `nn.Embedding`. (default: `False`)
    - `--ckpt_name`: This specify the checkpoint file name. This would be the name of trained checkpoint and you can continue your training with this model in the case of resuming training. If you want to conduct training from the beginning, this parameter should be omitted. When testing, this would be the name of the checkpoint you want to test. (default: `None`)
-
-   <br/>
-
+   
+<br/>
+   
 4. Run below command to conduct an inference with the trained model.
 
    ```shell
-   python src/main.py --mode='test' --use_gpt=TRUE OR FALSE --ckpt_name=CHECKPOINT_NAME
+   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='test' --ckpt_name=CHECKPOINT_NAME
    ```
-
-   Obviously, `use_gpt` argument should match with the setting in training, in order to load a proper model.
 
    <br/>
 
