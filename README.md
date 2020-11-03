@@ -61,10 +61,10 @@ There are 4 types of the default datasets as follows.
 
 <br/>
 
-- DailyDialog[[2](#2)]
-- EmpatheticDialogues[[3](#3)]
-- Persona-Chat[[4](#4)]
-- BlendedSkillTalk[[5](#5)]
+- DailyDialog[[2]](#2)
+- EmpatheticDialogues[[3]](#3)
+- Persona-Chat[[4]](#4)
+- BlendedSkillTalk[[5]](#5)
 
 <br/>
 
@@ -101,8 +101,6 @@ But they are just for checking how the trimmed utterances look like, so they are
    ```
 
    - `--config_path`: This indicates the path to the configuration file. (default: `"config.json"`)
-
-   <br/>
 
    Then there would be `{data_dir}` directory which has corresponding train & validation data files.
 
