@@ -117,7 +117,7 @@ But they are just for checking how the trimmed utterances look like, so they are
 3. Run the following command to train the model.
 
    ```shell
-   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='train' --use_gpt=TRUE OR FALSE --ckpt_name=CHECKPOINT_NAME
+   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='train' --ckpt_name=CHECKPOINT_NAME
    ```
 
    - `--mode`: You have to specify the mode among two options, 'train' or 'inference'.
