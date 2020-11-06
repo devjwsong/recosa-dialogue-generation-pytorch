@@ -176,7 +176,8 @@ class Manager():
             
             utter = None
             output_ids = None
-            for t in range(self.config['max_time']):
+            t = 0
+            while True:
                 if t % 2 == 0:
                     utter = input("You: ")
                     
@@ -191,8 +192,11 @@ class Manager():
                     else:
                         sent = tokens[:self.config['max_len']]
                         sent[-1] = self.config['eos_id']
-
-                    history[t] = sent
+                    
+                    if t < self.config['max_time']:
+                        history[t] = sent
+                    else:
+                        history = history[1:] + [sent]
                     src_input = torch.LongTensor(history).unsqueeze(0).to(self.config['device'])  # (B, T, L)
 
                     src_emb = self.model.src_embed(src_input)  # (B, L, 2*d_model)
@@ -213,10 +217,13 @@ class Manager():
                         sent = output_ids[:self.config['max_len']]
                         sent[-1] = self.config['eos_id']
                         
-                    history[t] = sent
-
-                if t == self.config['max_time']-1:
-                    print("This is the last turn.")
+                    if t < self.config['max_time']:
+                        history[t] = sent
+                    else:
+                        history = history[1:] + [sent]
+                        
+                t += 1
+                    
 
     def nucleus_sampling(self, e_output, e_mask):
         trg_input = [self.config['bos_id']]
@@ -225,6 +232,9 @@ class Manager():
         
         output_ids = []
         
+        seed = int(time.time())
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
         for pos in range(self.config['max_len']):
             trg_emb = self.model.trg_embed(trg_input)  # (B, L, 2*d_model)
             
@@ -245,9 +255,6 @@ class Manager():
             sorted_probs /= torch.sum(sorted_probs, dim=-1, keepdim=True)  # (B, vocab_size)
             
             # Random sampling
-            seed = int(time.time())
-            torch.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
             probs = torch.zeros(output.shape).to(self.config['device']).scatter_(-1, sorted_idxs, sorted_probs)  # (B, vocab_size)
             idxs = torch.multinomial(probs, 1).squeeze(-1)  # (B)
             
