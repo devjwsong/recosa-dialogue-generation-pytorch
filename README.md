@@ -32,7 +32,7 @@ The description of each variable is as follows. (Those not introduced in below t
 | `dialogue_split_line` | `String`          | The line for splitting each dialogue in the preprocessed data files. | `"[END OF DIALOGUE]"` |
 | `device`              | `String`          | The device type. (`"cuda"` or `"cpu"`) If this is set to `"cuda"`, then the device configuration is set to `torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')`. If this variable is `"cpu"`, then the setting becomes just `torch.devcie('cpu')`. | `"cuda"`              |
 | `learning_rate`       | `Number`(`float`) | The learning rate.                                           | `5e-4`                |
-| `batch_size`          | `Number`(`int`)   | The batch size.                                              | `26`                  |
+| `batch_size`          | `Number`(`int`)   | The batch size.                                              | `20`                  |
 | `num_epochs`          | `Number`(`int`)   | The total number of iterations.                              | `20`                  |
 | `max_len`             | `Number`(`int`)   | The maximum length of a sentence.                            | `128`                 |
 | `num_heads`           | `Number`(`int`)   | The number of heads for Multi-head attention.                | `8`                   |
@@ -46,7 +46,7 @@ The description of each variable is as follows. (Those not introduced in below t
 | `ckpt_dir`            | `String`          | The path for saved checkpoints.                              | `"saved_models"`      |
 | `end_command`         | `String`          | The command to stop the conversation when inferencing.       | `"Abort!"`            |
 | `gru_num_layers`      | `Number`(`int`)   | The number of layers in the word-level GRU.                  | `2`                   |
-| `gru_dropout`         | `Number`(`float`) | The dropout rate for GRU.                                    | `0.3`                 |
+| `gru_dropout`         | `Number`(`float`) | The dropout rate for GRU.                                    | `0.1`                 |
 | `use_gpt_embedding`   | `Boolean`         | This determines whether the model uses the pre-trained GPT2's embedding layer. If it is `false`, then the embedding layer is trained from the beginning using `nn.Embedding`. | `true`                |
 
 <br/>

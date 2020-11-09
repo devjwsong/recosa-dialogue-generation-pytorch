@@ -195,12 +195,14 @@ class Manager():
                     
                     if t < self.config['max_time']:
                         history[t] = sent
+                        e_mask = [1 for i in range(t+1)] + [0 for i in range(self.config['max_time']-t-1)]
                     else:
                         history = history[1:] + [sent]
+                        e_mask = [1 for i in range(self.config['max_time'])]
+                        
                     src_input = torch.LongTensor(history).unsqueeze(0).to(self.config['device'])  # (B, T, L)
 
                     src_emb = self.model.src_embed(src_input)  # (B, L, 2*d_model)
-                    e_mask = [1 for i in range(t+1)] + [0 for i in range(self.config['max_time']-t-1)]
                     e_mask = torch.BoolTensor(e_mask).unsqueeze(0).unsqueeze(0).to(self.config['device'])  # (B, 1, T)
                     e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
 
