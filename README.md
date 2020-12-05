@@ -128,7 +128,7 @@ But they are just for checking how the trimmed utterances look like, so they are
 4. Run below command to conduct an inference with the trained model.
 
    ```shell
-   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='test' --ckpt_name=CHECKPOINT_NAME
+   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='inference' --ckpt_name=CHECKPOINT_NAME
    ```
 
    <br/>
