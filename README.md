@@ -44,6 +44,7 @@ The description of each variable is as follows. (Those not introduced in below t
 | `max_time`            | `Number`(`int`)   | The maximum length of the dialogue history to be attended.   | `20`                  |
 | `nucleus_p`           | `Number`(`float`) | The ratio of the probability mass for top-$p$ sampling(nucleus sampling). | `0.9`                 |
 | `ckpt_dir`            | `String`          | The path for saved checkpoints.                              | `"saved_models"`      |
+| `ckpt_name`            | `String`          | The default name for the trained model. (without extension)                              | `"best_ckpt"`      |
 | `end_command`         | `String`          | The command to stop the conversation when inferencing.       | `"Abort!"`            |
 | `gru_num_layers`      | `Number`(`int`)   | The number of layers in the word-level GRU.                  | `2`                   |
 | `gru_dropout`         | `Number`(`float`) | The dropout rate for GRU.                                    | `0.1`                 |
@@ -97,7 +98,7 @@ But they are just for checking how the trimmed utterances look like, so they are
 2. Download & Preprocess all datasets. (If you want to use your own datasets, skip this step.)
 
    ```shell
-   python src/data_process.py --config_path=PATH_TO_CONFIGURATION_FILE
+   python src/data_load.py --config_path=PATH_TO_CONFIGURATION_FILE
    ```
 
    - `--config_path`: This indicates the path to the configuration file. (default: `"config.json"`)
@@ -121,17 +122,19 @@ But they are just for checking how the trimmed utterances look like, so they are
    ```
 
    - `--mode`: You have to specify the mode among two options, 'train' or 'inference'.
-   - `--ckpt_name`: This specify the checkpoint file name. This would be the name of trained checkpoint and you can continue your training with this model in the case of resuming training. If you want to conduct training from the beginning, this parameter should be omitted. When testing, this would be the name of the checkpoint you want to test. (default: `None`)
-   
-<br/>
-   
+   - `--ckpt_name`: This specifies the checkpoint file name. If this argument is not specified, then the model would be trained from the beginning and the default checkpoint name becomes `{ckpt_name}`. If you specified the checkpoint name but it does not exist, then the name you put becomes the checkpoint name and the training startes from the beginning. If the name is already that of existing trained model, then the training will be continued starting with that specified checkpoint. (default: `None`)
+
+   <br/>
+
 4. Run below command to conduct an inference with the trained model.
 
    ```shell
    python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='inference' --ckpt_name=CHECKPOINT_NAME
    ```
 
-   <br/>
+   - `--ckpt_name`: Unlike the case in the training mode, this must specify the name of trained checkpoint which exists.
+
+<br/>
 
 ---
 

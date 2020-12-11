@@ -22,6 +22,7 @@
     "max_time": 20,
     "nucleus_p": 0.9,
     "ckpt_dir": "saved_models",
+    "ckpt_name": "best_ckpt",
     "end_command": "Abort!",
     "gru_num_layers": 2,
     "gru_dropout": 0.1,
