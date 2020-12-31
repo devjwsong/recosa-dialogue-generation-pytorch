@@ -5,7 +5,7 @@ Multi-turn Dialogue Generation*[[1]](#1).
 
 The model detects the relevant dialogue histories with the self-attention mechanism, which uses the history-level transformer encoder, not the word-level.
 
-The details of structure is as follows.
+The details of structure are as follows.
 
 <img src="https://user-images.githubusercontent.com/16731987/97245796-2d7b6580-183f-11eb-9560-0c36038c0124.png" alt="The description of the ReCoSa structure." style="width: 60%; margin-left: 0;">
 
