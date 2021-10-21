@@ -13,6 +13,7 @@ python src/main.py \
     --max_grad_norm=1.0 \
     --train_batch_size=32 \
     --eval_batch_size=8 \
+    --num_workers=0 \
     --num_epochs=10 \
     --src_max_len=128 \
     --max_turns=10 \

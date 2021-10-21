@@ -12,4 +12,6 @@ python src/main.py \
     --dropout=0.1 \
     --gpus="0" \
     --top_p=0.9 \
-    --end_command="Abort!"
+    --end_command="Abort!" \
+    --log_idx=LOG_IDX \
+    --ckpt_file=CKPT_FILE

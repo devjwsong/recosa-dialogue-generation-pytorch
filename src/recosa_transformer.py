@@ -10,14 +10,14 @@ class ReCoSaTransformer(nn.Module):
         
         d_emb = args.d_model - args.d_pos
         self.word_embedding = nn.Embedding(args.vocab_size, d_emb)
-        self.pos_embedding = nn.Embedding(args.trg_mas_len, args.d_pos)
+        self.pos_embedding = nn.Embedding(args.trg_max_len, args.d_pos)
         
         # Word Level GRU components
         self.gru = nn.GRU(
             input_size=d_emb,
             hidden_size=d_emb,
             num_layers=args.num_gru_layers,
-            dropout=(0.0 if args.num_gru_layers == 1 else gru_dropout),
+            dropout=(0.0 if args.num_gru_layers == 1 else args.gru_dropout),
             batch_first=True,
         )
         
@@ -45,11 +45,11 @@ class ReCoSaTransformer(nn.Module):
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
             
-    def forward(self, src_inputs, src_poses, trg_inputs, trg_poses, e_masks, d_masks):  
+    def forward(self, src_inputs, trg_inputs, src_poses, trg_poses, e_masks, d_masks):  
         # src_inputs: (B, T, S_L), trg_inputs: (B, T_L), src_poses: (B, T), trg_poses: (B, T_L), e_masks: (B, T), d_masks: (B, T_L, T_L)
         # Embeddings & Masking 
-        src_embs = self.src_embedding(src_inputs)  # (B, T, d_model)
-        trg_embs = self.trg_embedding(trg_inputs)  # (B, T_L, d_model)
+        src_embs = self.src_embedding(src_inputs, src_poses)  # (B, T, d_model)
+        trg_embs = self.trg_embedding(trg_inputs, trg_poses)  # (B, T_L, d_model)
         
         # Encoding phase
         e_outputs = self.encoder(src_embs, e_masks)  # (B, T, d_model)
@@ -61,11 +61,11 @@ class ReCoSaTransformer(nn.Module):
     
     def src_embedding(self, src_inputs, src_poses):  # src_inputs: (B, T, S_L), src_poses: (B, T)
         src_embs = self.word_embedding(src_inputs)  # (B, T, L, d_emb)
-        max_len, d_emb = src_embs.shape[2], src_emb.shape[3]
+        max_len, d_emb = src_embs.shape[2], src_embs.shape[3]
         last_hiddens = self.gru(src_embs.view(-1, max_len, d_emb))[1][-1]  # (B*T, d_emb)
         
         batch_size = src_embs.shape[0]
-        src_embs = last_hiddens.view(batch_size, -1, d_model)  # (B, T, d_emb)
+        src_embs = last_hiddens.view(batch_size, -1, d_emb)  # (B, T, d_emb)
         pos_embs = self.pos_embedding(src_poses)  # (B, T, d_pos)
         src_embs = torch.cat((src_embs, pos_embs), dim=-1)  # (B, T, d_model)
         

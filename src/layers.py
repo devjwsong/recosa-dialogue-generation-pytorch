@@ -123,7 +123,7 @@ class FeedFowardLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        x = F.ReLU(self.linear_1(x)) # (B, L, d_ff)
+        x = F.relu(self.linear_1(x)) # (B, L, d_ff)
         x = self.dropout(x)
         x = self.linear_2(x) # (B, L, d_model)
 

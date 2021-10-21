@@ -28,9 +28,9 @@ class CustomDataset(Dataset):
             
             for t, turn in enumerate(turns):
                 if t % 2 == 0:  # Speaker 1: User
-                    token_idxs = [args.bos_id, args.sp1_id] + tokenizer.encode() + [args.eos_id]
+                    token_idxs = [args.bos_id, args.sp1_id] + tokenizer.encode(turn) + [args.eos_id]
                 else:  # Speacker 2: System
-                    token_idxs = [args.bos_id, args.sp2_id] + tokenizer.encode() + [args.eos_id]
+                    token_idxs = [args.bos_id, args.sp2_id] + tokenizer.encode(turn) + [args.eos_id]
                 
                 hists.append(token_idxs)
             
@@ -51,7 +51,7 @@ class CustomDataset(Dataset):
                     
                     if len(context) < args.max_turns:
                         num_extras = args.max_turns - len(context)
-                        context += [torch.LongTensor([args.bos_id, args.eos_id])] * num_extras
+                        context += [[args.bos_id, args.eos_id]] * num_extras
                     assert len(context) == args.max_turns
                     
                     if len(pers) > 0:
@@ -60,11 +60,9 @@ class CustomDataset(Dataset):
         
         assert len(self.src_idxs) == len(self.trg_idxs)
         assert len(self.src_idxs) == len(self.num_valid_turns)
-        
-        self.src_idxs = torch.LongTensor(self.src_idxs)
     
     def __len__(self):
-        return len(self.src_idxs[idx])
+        return len(self.src_idxs)
     
     def __getitem__(self, idx):
         return self.src_idxs[idx], self.num_valid_turns[idx], self.trg_idxs[idx]
@@ -87,8 +85,13 @@ class PadCollate():
         self.pad_id = pad_id
         
     def pad_collate(self, batch):
-        src_idxs, num_valid_turns, trg_idxs = batch  # src_idxs: (B, T, S_L), num_valid_turns: (B), trg_idxs: (B, ?)
-        trg_idxs = torch.nn.utils.rnn.pad_sequence(src_idxs, batch_first=True, padding_value=self.pad_id)  # (B, T_L)
+        src_idxs, num_valid_turns, trg_idxs = [], [], []
+        for seqs in batch:
+            src_idxs.append(seqs[0])
+            num_valid_turns.append(seqs[1])
+            trg_idxs.append(torch.LongTensor(seqs[2]))
+
+        trg_idxs = torch.nn.utils.rnn.pad_sequence(trg_idxs, batch_first=True, padding_value=self.pad_id)  # (B, T_L)
         
-        return src_idxs.contiguous(), torch.LongTensor(num_valid_turns).contiguous(), trg_idxs.contiguous()
+        return torch.LongTensor(src_idxs).contiguous(), torch.LongTensor(num_valid_turns).contiguous(), trg_idxs.contiguous()
         

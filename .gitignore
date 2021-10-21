@@ -133,11 +133,8 @@ nohup.out
 
 # Large size directories
 data/
-saved_models/
+lightning_logs
 
 # Notebook
 *.ipynb
 nohup.out
-
-# Unnecessary source files
-src/sentencepiece_train.py
