@@ -1,4 +1,5 @@
 from torch import nn
+from torch.nn import functional as F
 
 import torch
 import math
@@ -6,24 +7,19 @@ import math
 
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, d_ff, num_heads, dropout):
-        super().__init__()
-        self.d_model = d_model
-        self.d_ff = d_ff
-        self.num_heads = num_heads
-        self.dropout = dropout
-        
-        self.layer_norm_1 = LayerNormalization(self.d_model)
-        self.multihead_attention = MultiheadAttention(self.d_model, self.num_heads, self.dropout)
-        self.drop_out_1 = nn.Dropout(self.dropout)
+        super().__init__()        
+        self.layer_norm_1 = LayerNormalization(d_model)
+        self.multihead_attention = MultiheadAttention(d_model, num_heads, dropout)
+        self.drop_out_1 = nn.Dropout(dropout)
 
-        self.layer_norm_2 = LayerNormalization(self.d_model)
-        self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.dropout)
-        self.drop_out_2 = nn.Dropout(self.dropout)
+        self.layer_norm_2 = LayerNormalization(d_model)
+        self.feed_forward = FeedFowardLayer(d_model, d_ff, dropout)
+        self.drop_out_2 = nn.Dropout(dropout)
 
-    def forward(self, x, e_mask):
-        x_1 = self.layer_norm_1(x) # (B, L, d_model)
+    def forward(self, x, e_masks):  # x: (B, T, d_model), e_masks: (B, T)
+        x_1 = self.layer_norm_1(x) # (B, T, d_model)
         x = x + self.drop_out_1(
-            self.multihead_attention(x_1, x_1, x_1, mask=e_mask)
+            self.multihead_attention(x_1, x_1, x_1, mask=e_masks)
         ) # (B, L, d_model)
         x_2 = self.layer_norm_2(x) # (B, L, d_model)
         x = x + self.drop_out_2(self.feed_forward(x_2)) # (B, L, d_model)
@@ -34,31 +30,26 @@ class EncoderLayer(nn.Module):
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, d_ff, num_heads, dropout):
         super().__init__()
-        self.d_model = d_model
-        self.d_ff = d_ff
-        self.num_heads = num_heads
-        self.dropout = dropout
-        
-        self.layer_norm_1 = LayerNormalization(self.d_model)
-        self.masked_multihead_attention = MultiheadAttention(self.d_model, self.num_heads, self.dropout)
-        self.drop_out_1 = nn.Dropout(self.dropout)
+        self.layer_norm_1 = LayerNormalization(d_model)
+        self.masked_multihead_attention = MultiheadAttention(d_model, num_heads, dropout)
+        self.drop_out_1 = nn.Dropout(dropout)
 
-        self.layer_norm_2 = LayerNormalization(self.d_model)
-        self.multihead_attention = MultiheadAttention(self.d_model, self.num_heads, self.dropout)
-        self.drop_out_2 = nn.Dropout(self.dropout)
+        self.layer_norm_2 = LayerNormalization(d_model)
+        self.multihead_attention = MultiheadAttention(d_model, num_heads, dropout)
+        self.drop_out_2 = nn.Dropout(dropout)
 
-        self.layer_norm_3 = LayerNormalization(self.d_model)
-        self.feed_forward = FeedFowardLayer(self.d_model, self.d_ff, self.dropout)
-        self.drop_out_3 = nn.Dropout(self.dropout)
+        self.layer_norm_3 = LayerNormalization(d_model)
+        self.feed_forward = FeedFowardLayer(d_model, d_ff, dropout)
+        self.drop_out_3 = nn.Dropout(dropout)
 
-    def forward(self, x, e_output, e_mask, d_mask):
+    def forward(self, x, e_outputs, e_masks, d_masks):  # x: (B, L, d_model), e_outputs: (B, T, d_model), e_masks: (B, T), d_masks: (B, L, L)
         x_1 = self.layer_norm_1(x) # (B, L, d_model)
         x = x + self.drop_out_1(
-            self.masked_multihead_attention(x_1, x_1, x_1, mask=d_mask)
+            self.masked_multihead_attention(x_1, x_1, x_1, mask=d_masks)
         ) # (B, L, d_model)
         x_2 = self.layer_norm_2(x) # (B, L, d_model)
         x = x + self.drop_out_2(
-            self.multihead_attention(x_2, e_output, e_output, mask=e_mask)
+            self.multihead_attention(x_2, e_outputs, e_outputs, mask=e_masks)
         ) # (B, L, d_model)
         x_3 = self.layer_norm_3(x) # (B, L, d_model)
         x = x + self.drop_out_3(self.feed_forward(x_3)) # (B, L, d_model)
@@ -80,7 +71,6 @@ class MultiheadAttention(nn.Module):
         self.w_v = nn.Linear(d_model, d_model)
 
         self.dropout = nn.Dropout(dropout)
-        self.attn_softmax = nn.Softmax(dim=-1)
 
         # Final output linear transformation
         self.w_0 = nn.Linear(d_model, d_model)
@@ -116,7 +106,7 @@ class MultiheadAttention(nn.Module):
             attn_scores = attn_scores.masked_fill_(mask == 0, -1 * self.inf)
 
         # Softmax and multiplying K to calculate attention value
-        attn_distribs = self.attn_softmax(attn_scores)
+        attn_distribs = F.softmax(attn_scores, dim=-1)
 
         attn_distribs = self.dropout(attn_distribs)
         attn_values = torch.matmul(attn_distribs, v) # (B, H, L, d_k)
@@ -127,17 +117,13 @@ class MultiheadAttention(nn.Module):
 class FeedFowardLayer(nn.Module):
     def __init__(self, d_model, d_ff, dropout):
         super().__init__()
-        self.d_model = d_model
-        self.d_ff = d_ff
-        self.dropout = dropout
         
-        self.linear_1 = nn.Linear(self.d_model, self.d_ff, bias=True)
-        self.relu = nn.ReLU()
-        self.linear_2 = nn.Linear(self.d_ff, self.d_model, bias=True)
-        self.dropout = nn.Dropout(self.dropout)
+        self.linear_1 = nn.Linear(d_model, d_ff, bias=True)
+        self.linear_2 = nn.Linear(d_ff, d_model, bias=True)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        x = self.relu(self.linear_1(x)) # (B, L, d_ff)
+        x = F.ReLU(self.linear_1(x)) # (B, L, d_ff)
         x = self.dropout(x)
         x = self.linear_2(x) # (B, L, d_model)
 
@@ -147,44 +133,9 @@ class FeedFowardLayer(nn.Module):
 class LayerNormalization(nn.Module):
     def __init__(self, d_model, eps=1e-6):
         super().__init__()
-        self.d_model = d_model
-        self.eps = eps
-        self.layer = nn.LayerNorm([self.d_model], elementwise_affine=True, eps=self.eps)
+        self.layer = nn.LayerNorm([d_model], elementwise_affine=True, eps=eps)
 
     def forward(self, x):
         x = self.layer(x)
-
-        return x
-
-
-class PositionalEncoder(nn.Module):
-    def __init__(self, max_len, p_dim, device):
-        super().__init__()
-        self.device = device
-        self.max_len = max_len
-        self.p_dim = p_dim
-        
-        # Make initial positional encoding matrix with 0
-        pe_matrix= torch.zeros(self.max_len, self.p_dim) # (L, d_model)
-
-        # Calculating position encoding values
-        for pos in range(self.max_len):
-            for i in range(self.p_dim):
-                if i % 2 == 0:
-                    pe_matrix[pos, i] = math.sin(pos / (10000 ** (2 * i / self.p_dim)))
-                elif i % 2 == 1:
-                    pe_matrix[pos, i] = math.cos(pos / (10000 ** (2 * i / self.p_dim)))
-
-        pe_matrix = pe_matrix.unsqueeze(0) # (1, L, p_dim)
-        self.positional_encoding = pe_matrix.to(self.device).requires_grad_(False)
-
-    def forward(self, x, cal='add'):
-        assert cal == 'add' or cal == 'concat', "Please specify the calculation method, either 'add' or 'concat'."
-        
-        if cal == 'add':
-            x = x * math.sqrt(self.p_dim) # (B, L, d_model)
-            x = x + self.positional_encoding # (B, L, d_model)
-        elif cal == 'concat':
-            x = torch.cat((x, self.positional_encoding.repeat(x.shape[0],1,1)), dim=-1)  # (B, T, d_model+p_dim)
 
         return x

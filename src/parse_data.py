@@ -1,6 +1,5 @@
 from tqdm import tqdm
 from glob import glob
-from transformers import *
 
 import pickle
 import argparse
@@ -10,10 +9,6 @@ import json
 
 # For all
 data_list = ['daily_dialog', 'empathetic_dialogues', 'persona_chat', 'blended_skill_talk']
-
-# For empathetic dialogues
-comma_symbol = "_comma_"
-
 
 # One dialogue consists of two persona lists + turns (Personas might be empty)
 # {
@@ -69,6 +64,8 @@ def parse_daily_dialog(args):
     
     
 def parse_empathetic_dialogues(args):
+    comma_symbol = "_comma_"
+    
     raw_dir = "ParlAI/data/empatheticdialogues/empatheticdialogues"
     save_dir = f"{args.data_dir}/empathetic_dialogues"
     if not os.path.isdir(save_dir):

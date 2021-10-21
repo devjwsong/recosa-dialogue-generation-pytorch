@@ -1,307 +1,186 @@
 from transformers import *
 from recosa_transformer import *
-from custom_data import *
+from custom_dataset import *
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.nn import functional as F
+from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.plugins import DDPPlugin
 
 import torch
 import os, sys
 import numpy as np
 import argparse
-import time
 import copy
 import json
 
 
-class Manager():
-    def __init__(self, config_path, mode, ckpt_name=None):
-        print("Setting the configurations...")
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
-            
-        if self.config['device'] == "cuda":
-            self.config['device'] = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        elif self.config['device'] == "cpu":
-            self.config['device'] = torch.device('cpu')
-            
-        self.config['hidden_size'] = self.config['d_model']
-        
-        # Tokenizer & Vocab
-        print("Loading tokenizer & embedding...")
-        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        special_tokens = {
-            'bos_token': self.config['bos'],
-            'eos_token': self.config['eos'],
-            'pad_token': self.config['pad']
-        }
-        num_new_tokens = self.tokenizer.add_special_tokens(special_tokens)
-        vocab = self.tokenizer.get_vocab()
-        self.config['vocab_size'] = len(vocab)
-        self.config['bos_id'] = vocab[self.config['bos']]
-        self.config['eos_id'] = vocab[self.config['eos']]
-        self.config['pad_id'] = vocab[self.config['pad']]
-        
-        embedding = None
-        if self.config['use_gpt_embedding']:
-            gpt2 = GPT2LMHeadModel.from_pretrained('gpt2')
-            num_ori_tokens = gpt2.transformer.wte.num_embeddings
-            gpt2.resize_token_embeddings(num_ori_tokens + num_new_tokens)
-            embedding = gpt2.transformer.wte
-        
-        # Load model    
-        print("Loading the model...")
-        self.model = ReCoSaTransformer(self.config, embedding=embedding).to(self.config['device'])
-            
-        if mode == 'train':
-            # Load loss function
-            print("Loading loss function...")
-            self.criterion = nn.NLLLoss(ignore_index=self.config['pad_id'])
-            
-            # Load optimizer
-            print("Loading the optimizer...")
-            self.optim = torch.optim.AdamW(self.model.parameters(), lr=self.config['learning_rate'])
-            self.best_loss = sys.float_info.max
-            
-            # Load train & valid dataset
-            print("Loading train & valid data...")
-            train_set = CustomDataset('train', self.config)
-            valid_set = CustomDataset('valid', self.config)
-            self.train_loader = DataLoader(train_set, shuffle=True, batch_size=self.config['batch_size'])
-            self.valid_loader = DataLoader(valid_set, shuffle=True, batch_size=self.config['batch_size'])
-            
-            if not os.path.exists(self.config['ckpt_dir']):
-                os.mkdir(self.config['ckpt_dir'])
-        
-        if ckpt_name is not None:
-            if os.path.exists(f"{self.config['ckpt_dir']}/{ckpt_name}.tar"):
-                print("Loading the trained checkpoint...")
-                checkpoint = torch.load(f"{self.config['ckpt_dir']}/{ckpt_name}.tar")
-                self.model.load_state_dict(checkpoint['model_state_dict'])
-                
-                if mode == 'train':
-                    print("The training restarts with the specifed checkpoint.")
-                    self.optim.load_state_dict(checkpoint['optim_state_dict'])
-                    self.best_loss = checkpoint['loss']
-                    self.ckpt_name = ckpt_name
-            else:
-                assert mode == 'train', "Please check if the checkpoint name exists."
-                
-                print(f"The checkpoint named '{ckpt_name}' does not exist. This becomes the best checkpoint name from now on.")
-                self.ckpt_name = ckpt_name
-        else:
-            print("You did not specify the checkpoint name.")
-            print(f"The default name '{self.config['ckpt_name']}' is set.")
-            self.ckpt_name = self.config['ckpt_name']
-            
-            print("Initializing model...")
-            self.model.init_model()
-              
-        print("Setting finished.")
-              
-    def train(self):
-        print("Training starts.")
-              
-        for epoch in range(1, self.config['num_epochs']+1):
-            self.model.train()
-            
-            print(f"#################### Epoch: {epoch} ####################")
-            train_losses = []  
-            for i, batch in enumerate(tqdm(self.train_loader)):
-                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = batch
-                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = \
-                    src_inputs.to(self.config['device']), trg_inputs.to(self.config['device']), trg_outputs.to(self.config['device']), \
-                    e_mask.to(self.config['device']), d_mask.to(self.config['device'])
-              
-                output = self.model(src_inputs, trg_inputs, e_mask, d_mask)  # (B, L, vocab_size)
-                
-                self.optim.zero_grad()
-                
-                loss = self.criterion(
-                    output.view(-1, self.config['vocab_size']),
-                    trg_outputs.contiguous().view(output.shape[0] * output.shape[1])
-                )
-                
-                loss.backward()
-                self.optim.step()
-                
-                train_losses.append(loss.item())
-              
-            mean_train_loss = np.mean(train_losses)
-            print(f"Train loss: {mean_train_loss}")
-            
-            valid_loss = self.validation()
-              
-            if valid_loss < self.best_loss:
-                self.best_loss = valid_loss  
-                  
-                state_dict = {
-                    'model_state_dict': self.model.state_dict(),
-                    'optim_state_dict': self.optim.state_dict(),
-                    'loss': self.best_loss,
-                }
-              
-                torch.save(state_dict, f"{self.config['ckpt_dir']}/{self.ckpt_name}.tar")
-                print(f"***** Current best checkpoint is saved. *****")
-              
-            print(f"Best valid loss: {self.best_loss}")
-            print(f"Valid loss: {valid_loss}")
-              
-        print("Training finished!")
+def train(args):
+    # For directory setting
+    args.task_dir = f"{args.data_dir}/{args.task_name}"
+    assert os.path.isdir(args.task_dir)
+
+    # Loading the pytorch lightning module
+    print(f"Loading the pytorch lightning moduel for training...")
+    module = TrainModule(args)
     
-    def validation(self):
-        print("Validation processing...")
-        self.model.eval()
-              
-        valid_losses = []
-        with torch.no_grad():
-            for i, batch in enumerate(tqdm(self.valid_loader)):
-                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = batch
-                src_inputs, trg_inputs, trg_outputs, e_mask, d_mask = \
-                    src_inputs.to(self.config['device']), trg_inputs.to(self.config['device']), trg_outputs.to(self.config['device']), \
-                    e_mask.to(self.config['device']), d_mask.to(self.config['device'])
-              
-                output = self.model(src_inputs, trg_inputs, e_mask, d_mask)  # (B, L, vocab_size)
-                
-                loss = self.criterion(
-                    output.view(-1, self.config['vocab_size']),
-                    trg_outputs.contiguous().view(output.shape[0] * output.shape[1])
-                )
-                
-                valid_losses.append(loss.item())
-              
-        mean_valid_loss = np.mean(valid_losses)
-              
-        return mean_valid_loss
-        
-              
-    def inference(self):
-        print("Let's start!")
-        print(f"If you want to quit the conversation, please type \"{self.config['end_command']}\".")
-        self.model.eval()
-        
-        with torch.no_grad():
-            # Diagloue history
-            init = [self.config['pad_id']] * self.config['max_len']
-            history = [init for t in range(self.config['max_time'])]  # (T, L)
-            
-            utter = None
-            output_ids = None
-            t = 0
-            while True:
-                if t % 2 == 0:
-                    utter = input("You: ")
-                    
-                    if utter == self.config['end_command']:
-                        print("Bot: Good bye.")
-                        break
+    # Loading datasets & dataloader
+    train_set = CustomDataset(args, tokenizer, data_type="train")
+    valid_set = CustomDataset(args, tokenizer, data_type="valid")
+    test_set = CustomDataset(args, tokenizer, data_type="test")
+    
+    train_loader = DataLoader(train_set, collate_fn=ppd.pad_collate, batch_size=args.train_batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
+    train_loader = DataLoader(valid_set, collate_fn=ppd.pad_collate, batch_size=args.eval_batch_size, num_workers=args.num_workers, pin_memory=True)
+    train_loader = DataLoader(test_set, collate_fn=ppd.pad_collate, batch_size=args.eval_batch_size, num_workers=args.num_workers, pin_memory=True)
+    
+    # Calculate total training steps
+    args.gpus = [int(idx.strip()) for idx in args.gpus.split(",")]
+    num_gpus = len(args.gpus)
+    num_devices = num_gpus * args.num_nodes
+    q, r = divmod(len(train_loader), num_devices)
+    num_batches = q if r == 0 else q+1
+    args.total_train_steps = args.num_epochs * num_batches
+    args.warmup_steps = int(args.warmup_ratio * args.total_train_steps)
+    
+    print("Setting pytorch lightning callback & trainer...")
+    # Model checkpoint & Early stopping callback
+    filename = "{epoch}_{train_ppl:.4f}_{valid_ppl:.4f}"
+    monitor = "valid_ppl"
+    
+    checkpoint_callback = ModelCheckpoint(
+        filename=filename,
+        verbose=True,
+        monitor=monitor,
+        mode='min',
+        every_n_epochs=1,
+        save_weights_only=True
+    )
+    
+    stopping_callback = EarlyStopping(
+        monitor=monitor,
+        min_delta=1e-4,
+        patience=3,
+        verbose=True,
+        mode='min'
+    )
+    
+    # Trainer setting
+    seed_everything(args.seed, workers=True)
+    trainer = Trainer(
+        check_val_every_n_epoch=1,
+        gpus=args.gpus,
+        num_nodes=args.num_nodes,
+        max_epochs=args.num_epochs,
+        gradient_clip_val=args.max_grad_norm,
+        deterministic=True,
+        accelerator="ddp",
+        callbacks=[checkpoint_callback, stopping_callback],
+        plugins=DDPPlugin(find_unused_parameters=unused_param_flag),
+    )
+    
+    print("Train starts.")
+    trainer.fit(model=module, train_dataloaders=train_loader, val_dataloaders=valid_loader)
+    print("Training done.")
+    
+    print("Test starts.")
+    trainer.test(dataloaders=test_loader, ckpt_path='best')
+    
+    
+def infer(args):
+    print(f"Loading the pytorch lightning moduel for inference...")
+    module = TrainModule.load_from_checkpoint(f"./lightning_logs/version_{args.log_idx}/checkpoints/{args.ckpt_file}")
+    module.model.eval()
+    args = module.args
+    
+    assert len(args.gpus.split(",")) == 1, "Inference should use only one GPU."
+    device = torch.device(f"cuda:{self.args.gpus}")
+    module = module.to(device)
+    
+    print("Let's start!")
+    print(f"If you want to quit the conversation, please type \"{self.config['end_command']}\".")
+    with torch.no_grad():
+        hists = []
+        utter, output_ids = None, None
+        while True:
+            utter = input("You: ")
 
-                    tokens = self.tokenizer.encode(utter)
-                    if len(tokens) < self.config['max_len']:
-                        sent = tokens + [self.config['eos_id']]
-                        sent += [self.config['pad_id']] * (self.config['max_len'] - len(sent))
-                    else:
-                        sent = tokens[:self.config['max_len']]
-                        sent[-1] = self.config['eos_id']
-                    
-                    if t < self.config['max_time']:
-                        history[t] = sent
-                        e_mask = [1 for i in range(t+1)] + [0 for i in range(self.config['max_time']-t-1)]
-                    else:
-                        history = history[1:] + [sent]
-                        e_mask = [1 for i in range(self.config['max_time'])]
-                        
-                    src_input = torch.LongTensor(history).unsqueeze(0).to(self.config['device'])  # (B, T, L)
-
-                    src_emb = self.model.src_embed(src_input)  # (B, L, 2*d_model)
-                    e_mask = torch.BoolTensor(e_mask).unsqueeze(0).unsqueeze(0).to(self.config['device'])  # (B, 1, T)
-                    e_output = self.model.encoder(src_emb, e_mask)  # (B, L, 2*d_model)
-
-                    output_ids = self.nucleus_sampling(e_output, e_mask)  # (L) list
-                    res = self.tokenizer.decode(output_ids)
-
-                    print(f"Bot: {res}")
-                    
-                else:
-                    if len(output_ids) < self.config['max_len']:
-                        sent = output_ids + [self.config['eos_id']]
-                        sent += [self.config['pad_id']] * (self.config['max_len'] - len(sent))
-                    else:
-                        sent = output_ids[:self.config['max_len']]
-                        sent[-1] = self.config['eos_id']
-                        
-                    if t < self.config['max_time']:
-                        history[t] = sent
-                    else:
-                        history = history[1:] + [sent]
-                        
-                t += 1
-                    
-
-    def nucleus_sampling(self, e_output, e_mask):
-        trg_input = [self.config['bos_id']]
-        trg_input += [self.config['pad_id']] * (self.config['max_len']-len(trg_input))
-        trg_input = torch.LongTensor(trg_input).unsqueeze(0).to(self.config['device'])  # (B, L)
-        
-        output_ids = []
-        
-        seed = int(time.time())
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        for pos in range(self.config['max_len']):
-            trg_emb = self.model.trg_embed(trg_input)  # (B, L, 2*d_model)
-            
-            d_mask = (trg_input != self.config['pad_id']).unsqueeze(1)  # (B, 1, L)
-            nopeak_mask = torch.ones([1, self.config['max_len'], self.config['max_len']], dtype=torch.bool)  # (1, L, L)
-            nopeak_mask = torch.tril(nopeak_mask).to(self.config['device'])  # (1, L, L) to triangular shape
-            d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
-            
-            d_output = self.model.decoder(trg_emb, e_output, e_mask, d_mask)  # (B, L, 2*d_model)
-            
-            output = F.softmax(self.model.output_linear(d_output), dim=-1)  # (B, L, vocab_size)
-            output = output[:,pos]  # (B, vocab_size)
-            
-            sorted_probs, sorted_idxs = torch.sort(output, descending=True)
-            cumsum_probs = torch.cumsum(sorted_probs, dim=-1)  # (B, vocab_size)
-            idx_remove = cumsum_probs > self.config['nucleus_p']
-            sorted_probs[idx_remove] = 1e-8
-            sorted_probs /= torch.sum(sorted_probs, dim=-1, keepdim=True)  # (B, vocab_size)
-            
-            # Random sampling
-            probs = torch.zeros(output.shape).to(self.config['device']).scatter_(-1, sorted_idxs, sorted_probs)  # (B, vocab_size)
-            idxs = torch.multinomial(probs, 1).squeeze(-1)  # (B)
-            
-            if pos < self.config['max_len']-1:
-                trg_input[:, pos+1] = idxs
-            
-            output_ids.append(idxs.squeeze(0).item())    
-            if idxs.squeeze(0).item() == self.config['eos_id']:
+            if utter == args.end_command:
                 break
-            
-        if output_ids[-1]== self.config['eos_id']:
-            output_ids = output_ids[:-1]
-            
-        return output_ids
+
+            token_idxs = [args.bos_id, args.sp1_id] + tokenizer.encode(utter) + [args.eos_id]
+            if len(token_idxs) <= self.src_max_len:
+                token_idxs += [args.pad_id] * (args.src_max_len - len(token_idxs))
+            else:
+                token_idxs = token_idxs[:self.src_max_len]
+                token_idxs[-1] = self.eos_id
+
+            assert len(token_idxs) == args.src_max_len
+
+            hists.append(token_idxs)
+            if len(hists) > args.max_turns:
+                hists = hists[1:]
+
+            num_valid_turns = torch.LongTensor([len(hists)])  # (1)
+            src_idxs = torch.LongTensor(hists).unsqueeze(0).to(device)  # (1, T, S_L)
+
+            output_ids = module(src_idxs, num_valid_turns)
+            res = self.tokenizer.decode(output_ids, skip_special_tokens=True)
+
+            print(f"Bot: {res}")
+
+            hists.append(output_ids)                
         
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_path', required=True, help="The path to configuration file.")
-    parser.add_argument('--mode', required=True, help="Train or inference?")
-    parser.add_argument('--ckpt_name', required=False, help="Best checkpoint file.")
-              
+    parser.add_argument('--mode', type=str, required=True, help="The running mode: train or inference?")
+    parser.add_argument('--seed', type=int, default=0, help="The random seed number.")
+    parser.add_argument('--data_dir', type=str, default="data", help="The name of the parent directory where the whole data files are stored.")
+    parser.add_argument('--task', type=str, required=True, help="The name of the specific task(dataset) name.")
+    parser.add_argument('--pad_token', type=str, default="<pad>", help="The pad token.")
+    parser.add_argument('--bos_token', type=str, default="<bos>", help="The bos token.")
+    parser.add_argument('--eos_token', type=str, default="<eos>", help="The eos token.")
+    parser.add_argument('--sp1_token', type=str, default="<sp1>", help="The speaker1 token.")
+    parser.add_argument('--sp2_token', type=str, default="<sp2>", help="The speaker2 token.")
+    parser.add_argument('--learning_rate', type=float, default=5e-4, help="The initial learning rate.")
+    parser.add_argument('--warmup_ratio', type=float, default=0.0, help="The warmup step ratio.")
+    parser.add_argument('--max_grad_norm', type=float, default=1.0, help="The max gradient for gradient clipping.")
+    parser.add_argument('--train_batch_size', type=int, default=32, help="The batch size for training.")
+    parser.add_argument('--eval_batch_size', type=int, default=8, help="The batch size for evaluating.")
+    parser.add_argument('--num_epochs', type=int, default=10, help="The number of training epochs.")
+    parser.add_argument('--src_max_len', type=int, default=128, help="The max length of each input utterance.")
+    parser.add_argument('--src_max_turns', type=int, default=5, help="The max number of utterances to be included.")
+    parser.add_argument('--trg_max_len', type=int, default=128, help="The max length of a target response.")
+    parser.add_argument('--num_heads', type=int, default=8, help="The number of heads for multi-head attention.")
+    parser.add_argument('--num_encoder_layers', type=int, default=6, help="The number of layers in the utterance-level encoder.")
+    parser.add_argument('--num_gru_layers', type=int, default=2, help="The number of layers in the word-level encoder.")
+    parser.add_argument('--gru_dropout', type=float, default=0.1, help="The dropout rate of the word-level encoder.")
+    parser.add_argument('--num_decoder_layers', type=int, default=6, help="The number of layers in the decoder.")
+    parser.add_argument('--d_model', type=int, default=768, help="The hidden size inside of the transformer module.")
+    parser.add_argument('--d_pos', type=int, default=256, help="The hidden size of the positional embedding.")
+    parser.add_argument('--d_ff', type=int, default=2048, help="The intermediate hidden size of each feed-forward layer.")
+    parser.add_argument('--dropout', type=float, default=0.1, help="The dropout rate of the transformer modules.")
+    parser.add_argument('--top_p', type=float, default=0.9, help="The top-p value for nucleus sampling decoding.")
+    parser.add_argument('--end_command', type=str, default="Abort!", help="The command to stop the conversation when inferencing.")
+    parser.add_argument('--gpus', type=str, default="0", help="The indices of GPUs to use.")
+    parser.add_argument('--num_nodes', type=int, default=1, help="The number of machine.")
+    parser.add_argument('--log_idx', type=int, required=False, help="The index of a lightning log directory which contains the checkpoints to use.")
+    parser.add_argument('--ckpt_file', type=str, required=False, help="The full name of the trained checkpoint for inferencing.")
+    
     args = parser.parse_args()
     
-    assert args.mode == 'train' or args.mode=='inference', print("Please specify a correct mode name, 'train' or 'inference'.")
+    assert args.mode in ["train", "infer"]
+    assert args.task in ["daily_dialog", "empathetic_dialogues", "persona_chat", "blended_skill_talk"]
+    if args.mode == "infer":
+        assert args.log_idx is not None
+        
+    print("#"*50 + "Running spec" + "#"*50)
+    print(args)
               
     if args.mode == 'train':
-        manager = Manager(args.config_path, args.mode, ckpt_name=args.ckpt_name)
-
-        manager.train()
+        train(args)
+    elif args.mode == 'infer':
+        infer(args)
         
-    elif args.mode == 'inference':
-        assert args.ckpt_name is not None, "Please specify the trained model checkpoint."
-        
-        manager = Manager(args.config_path, args.mode, ckpt_name=args.ckpt_name)
-        
-        manager.inference()
+    print("GOOD BYE!")

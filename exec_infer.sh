@@ -1,0 +1,15 @@
+python src/main.py \
+    --mode="infer" \
+    --seed=0 \
+    --pad_token="<pad>" \
+    --bos_token="<bos>" \
+    --eos_token="<eos>" \
+    --sp1_token="<sp1>" \
+    --sp2_token="<sp2>" \
+    --src_max_len=128 \
+    --max_turns=10 \
+    --trg_max_len=128 \
+    --dropout=0.1 \
+    --gpus="0" \
+    --top_p=0.9 \
+    --end_command="Abort!"
