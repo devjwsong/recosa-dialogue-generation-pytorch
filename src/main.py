@@ -161,7 +161,7 @@ def infer(args):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, required=True, help="The running mode: train or inference?")
-    parser.add_argument('--seed', type=int, default=0, help="The random seed number.")
+    parser.add_argument('--seed', type=int, default=0, help="The random seed number for training.")
     parser.add_argument('--data_dir', type=str, default="data", help="The name of the parent directory where the whole data files are stored.")
     parser.add_argument('--task', type=str, required=False, help="The name of the specific task(dataset) name.")
     parser.add_argument('--pad_token', type=str, default="<pad>", help="The pad token.")
@@ -171,19 +171,19 @@ if __name__=='__main__':
     parser.add_argument('--sp2_token', type=str, default="<sp2>", help="The speaker2 token.")
     parser.add_argument('--learning_rate', type=float, default=5e-4, help="The initial learning rate.")
     parser.add_argument('--warmup_ratio', type=float, default=0.0, help="The warmup step ratio.")
-    parser.add_argument('--max_grad_norm', type=float, default=1.0, help="The max gradient for gradient clipping.")
+    parser.add_argument('--max_grad_norm', type=float, default=1.0, help="The max value for gradient clipping.")
     parser.add_argument('--train_batch_size', type=int, default=32, help="The batch size for training.")
-    parser.add_argument('--eval_batch_size', type=int, default=8, help="The batch size for evaluating.")
+    parser.add_argument('--eval_batch_size', type=int, default=8, help="The batch size for evaluation.")
     parser.add_argument('--num_workers', type=int, default=0, help="The number of workers for data loading.")
     parser.add_argument('--num_epochs', type=int, default=10, help="The number of training epochs.")
     parser.add_argument('--src_max_len', type=int, default=128, help="The max length of each input utterance.")
-    parser.add_argument('--max_turns', type=int, default=5, help="The max number of utterances to be included.")
+    parser.add_argument('--max_turns', type=int, default=10, help="The max number of utterances to be included.")
     parser.add_argument('--trg_max_len', type=int, default=128, help="The max length of a target response.")
     parser.add_argument('--num_heads', type=int, default=8, help="The number of heads for multi-head attention.")
     parser.add_argument('--num_encoder_layers', type=int, default=6, help="The number of layers in the utterance-level encoder.")
     parser.add_argument('--num_gru_layers', type=int, default=2, help="The number of layers in the word-level encoder.")
     parser.add_argument('--gru_dropout', type=float, default=0.1, help="The dropout rate of the word-level encoder.")
-    parser.add_argument('--num_decoder_layers', type=int, default=6, help="The number of layers in the decoder.")
+    parser.add_argument('--num_decoder_layers', type=int, default=2, help="The number of layers in the decoder.")
     parser.add_argument('--d_model', type=int, default=768, help="The hidden size inside of the transformer module.")
     parser.add_argument('--d_pos', type=int, default=256, help="The hidden size of the positional embedding.")
     parser.add_argument('--d_ff', type=int, default=2048, help="The intermediate hidden size of each feed-forward layer.")
@@ -193,7 +193,7 @@ if __name__=='__main__':
     parser.add_argument('--gpus', type=str, default="0", help="The indices of GPUs to use.")
     parser.add_argument('--num_nodes', type=int, default=1, help="The number of machine.")
     parser.add_argument('--log_idx', type=int, required=False, help="The index of a lightning log directory which contains the checkpoints to use.")
-    parser.add_argument('--ckpt_file', type=str, required=False, help="The full name of the trained checkpoint for inferencing.")
+    parser.add_argument('--ckpt_file', type=str, required=False, help="The full name of the trained checkpoint for inference.")
     
     args = parser.parse_args()
     
@@ -201,7 +201,7 @@ if __name__=='__main__':
     if args.mode == "train":
         assert args.task in ["daily_dialog", "empathetic_dialogues", "persona_chat", "blended_skill_talk"]
     if args.mode == "infer":
-        assert args.log_idx is not None
+        assert args.log_idx is not None and args.ckpt_file is not None
         
     print("#"*50 + "Running spec" + "#"*50)
     print(args)

@@ -13,42 +13,61 @@ The details of structure are as follows.
 
 ---
 
-### Configurations
+### Arguments
 
-You can set various arguments by modifying `config.json` in the top directory.
-
-The description of each variable is as follows. (Those not introduced in below table are set automatically and should not be changed.)
+**Arguements for training**
 
 | Argument              | Type              | Description                                                  | Default               |
 | --------------------- | ----------------- | ------------------------------------------------------------ | --------------------- |
-| `data_dir`            | `String`          | The name of the parent directory where data files are stored. | `"data"`              |
-| `train_name`          | `String`          | The prefix of the train data files' name.                    | `"train"`             |
-| `valid_name`          | `String`          | The prefix of the validation data files' name.               | `"validation"`        |
-| `train_frac`          | `Number`(`float`) | The ratio of the conversations to be included in the train set. | `0.85`                |
-| `pad`                 | `String`          | The padding token.                                           | `"<pad>"`             |
-| `unk`                 | `String`          | The unknown token.                                           | `"<unk>"`             |
-| `bos`                 | `String`          | The BOS(Beginning Of Sentence) token.                        | `"<bos>"`             |
-| `eos`                 | `String`          | The EOS(End Of Sentence) token.                              | `"<eos>"`             |
-| `dialogue_split_line` | `String`          | The line for splitting each dialogue in the preprocessed data files. | `"[END OF DIALOGUE]"` |
-| `device`              | `String`          | The device type. (`"cuda"` or `"cpu"`) If this is set to `"cuda"`, then the device configuration is set to `torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')`. If this variable is `"cpu"`, then the setting becomes just `torch.devcie('cpu')`. | `"cuda"`              |
-| `learning_rate`       | `Number`(`float`) | The learning rate.                                           | `5e-4`                |
-| `batch_size`          | `Number`(`int`)   | The batch size.                                              | `20`                  |
-| `num_epochs`          | `Number`(`int`)   | The total number of iterations.                              | `20`                  |
-| `max_len`             | `Number`(`int`)   | The maximum length of a sentence.                            | `128`                 |
-| `num_heads`           | `Number`(`int`)   | The number of heads for Multi-head attention.                | `8`                   |
-| `encoder_num_layers`  | `Number`(`int`)   | The number of layers in the encoder.                         | `6`                   |
-| `decoder_num_layers`  | `Number`(`int`)   | The number of layers in the decoder.                         | `6`                   |
-| `d_model`             | `Number`(`int`)   | The size of hidden states in the model.                      | `512`                 |
-| `d_ff`                | `Number`(`int`)   | The size of intermediate  hidden states in the feed-forward layer. | `2048`                |
-| `dropout`             | `Number`(`float`) | The dropout rate.                                            | `0.1`                 |
-| `max_time`            | `Number`(`int`)   | The maximum length of the dialogue history to be attended.   | `20`                  |
-| `nucleus_p`           | `Number`(`float`) | The ratio of the probability mass for top-$p$ sampling(nucleus sampling). | `0.9`                 |
-| `ckpt_dir`            | `String`          | The path for saved checkpoints.                              | `"saved_models"`      |
-| `ckpt_name`            | `String`          | The default name for the trained model. (without extension)                              | `"best_ckpt"`      |
-| `end_command`         | `String`          | The command to stop the conversation when inferencing.       | `"Abort!"`            |
-| `gru_num_layers`      | `Number`(`int`)   | The number of layers in the word-level GRU.                  | `2`                   |
-| `gru_dropout`         | `Number`(`float`) | The dropout rate for GRU.                                    | `0.1`                 |
-| `use_gpt_embedding`   | `Boolean`         | This determines whether the model uses the pre-trained GPT2's embedding layer. If it is `false`, then the embedding layer is trained from the beginning using `nn.Embedding`. | `true`                |
+| `--seed` | `int` | The random seed number for training. | `0` |
+| `--data_dir`          | `str`       | The name of the parent directory where the whole data files are stored. | `"data"`              |
+| `--task`     | `str`       | The name of the specific task(dataset) name. (`"daily_dialog"`, `"empathetic_dialogues"`, `"persona_chat"`, `"blended_skill_talk"`) | *YOU MUST SPECIFY* |
+| `--pad_token`         | `str`        | The pad token.                             | `"<pad>"`             |
+| `--bos_token`         | `str`       | The bos token.          | `"<bos>"`             |
+| `--eos_token`         | `str`       | The eos token.                | `"<eos>"`             |
+| `--sp1_token` | `str` | The speaker1 token. | `"<sp1>"` |
+| `--sp2_token` | `str` | The speaker2 token. | `"<sp2>"` |
+| `--learning_rate`     | `float` | The initial learning rate.                                   | `5e-4`                |
+| `--warmup_ratio` | `float` | The warmup step ratio. | `0.0` |
+| `--max_grad_norm` | `float` | The max value for gradient clipping. | `1.0` |
+| `--train_batch_size` | `int` | The batch size for training.                   | `32`              |
+| `--eval_batch_size` | `int` | The batch size for evaluation. | `8` |
+| `--num_workers` | `int` | The number of workers for data loading. | `0` |
+| `--num_epochs`        | `int` | The number of training epochs. | `10`              |
+| `--src_max_len` | `int` | The max length of each input utterance. | `128`                 |
+| `--max_turns` | `int` | The max number of utterances to be included. | `10` |
+| `--trg_max_len` | `int` | The max length of a target response. | `128` |
+| `--num_heads`         | `int` | The number of heads for multi-head attention. | `8`                   |
+| `--num_encoder_layers` | `int` | The number of layers in the utterance-level encoder. | `6`                   |
+| `--num_gru_layers` | `int` | The number of layers in the word-level encoder. | `2` |
+| `--gru_dropout` | `float` | The dropout rate of the word-level encoder. | `0.1` |
+| `--num_decoder_layers` | `int` | The number of layers in the decoder. | `2`                  |
+| `--d_model`           | `int` | The hidden size inside of the transformer module. | `768`              |
+| `--d_pos` | `int` | The hidden size of the positional embedding. | `256` |
+| `--d_ff`              | `int` | The intermediate hidden size of each feed-forward layer. | `2048`                |
+| `--dropout`           | `int` | The dropout rate of the transformer modules. | `0.1`                 |
+| `--gpus` | `str` | The indices of GPUs to use. (This should be a string which contains index values separated with commas. ex: `"0, 1, 2, 3"`) | `"0"` |
+| `--num_nodes` | `int` | The number of machine. | `1` |
+
+<br/>
+
+**Arguments for inference**
+
+| Argument        | Type    | Description                                                  | Default            |
+| --------------- | ------- | ------------------------------------------------------------ | ------------------ |
+| `--pad_token`   | `str`   | The pad token.                                               | `"<pad>"`          |
+| `--bos_token`   | `str`   | The bos token.                                               | `"<bos>"`          |
+| `--eos_token`   | `str`   | The eos token.                                               | `"<eos>"`          |
+| `--sp1_token`   | `str`   | The speaker1 token.                                          | `"<sp1>"`          |
+| `--sp2_token`   | `str`   | The speaker2 token.                                          | `"<sp2>"`          |
+| `--src_max_len` | `int`   | The max length of each input utterance.                      | `128`              |
+| `--max_turns`   | `int`   | The max number of utterances to be included.                 | `10`               |
+| `--trg_max_len` | `int`   | The max length of a target response.                         | `128`              |
+| `--gpus`        | `str`   | The indices of GPUs to use. (When inferencing, only a single GPU is used. If you try to set mutiple GPUs, the assertion error will be raised.) | `"0"`              |
+| `--top_p`       | `float` | The top-p value for nucleus sampling decoding.               | `0.9`              |
+| `--end_command` | `str`   | The command to stop the conversation when inferencing.       | `"Abort!"`         |
+| `--log_idx`     | `int`   | The index of a lightning log directory which contains the checkpoints to use. | *YOU MUST SPECIFY* |
+| `--ckpt_file`   | `str`   | The full name of the trained checkpoint for inference.       | *YOU MUST SPECIFY* |
 
 <br/>
 
@@ -69,17 +88,11 @@ There are 4 types of the default datasets as follows.
 
 <br/>
 
-You can use whatever data you want, but make sure that you should make `{data_dir}/{train_name}_id.txt` and `{data_dir}/{valid_name}_id.txt` 
+For this project, we use the ParlAI[[6]](#6) platform made by Facebook, to download the datasets we need.
 
-consisting of token ids and dialogue split lines.
+This repository also provides a useful parsing script for each downloaded data.
 
-<img src="https://user-images.githubusercontent.com/16731987/97249049-6ff47080-1846-11eb-81bd-fce6b070db5b.png" alt="The details of the data format." style="width: 80%; margin-left: 0;">
-
-<br/>
-
-If you just run the download & preprocess script, you will also have `{data_dir}/{train_name}.txt` and `{data_dir}/{valid_name}.txt`.
-
-But they are just for checking how the trimmed utterances look like, so they are not used for the actual training.
+The detailed instruction for using ParlAI can be found in the official document[[7]](#7).
 
 <br/>
 
@@ -95,44 +108,55 @@ But they are just for checking how the trimmed utterances look like, so they are
 
    <br/>
 
-2. Download & Preprocess all datasets. (If you want to use your own datasets, skip this step.)
+2. Clone the official ParlAI repository in your project directory.
 
    ```shell
-   python src/data_load.py --config_path=PATH_TO_CONFIGURATION_FILE
+   git clone https://github.com/facebookresearch/ParlAI.git && cd ParlAI
    ```
-
-   - `--config_path`: This indicates the path to the configuration file. (default: `"config.json"`)
-
-   Then there would be `{data_dir}` directory which has corresponding train & validation data files.
-
-   In default setting, the structure of whole data directory should be like below.
-
-   - `data`
-     - `train_id.txt`
-     - `train.txt`
-     - `validation_id.txt`
-     - `validation.txt`
 
    <br/>
 
-3. Run the following command to train the model.
+3. Setup ParlAI and download the data.
 
    ```shell
-   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='train' --ckpt_name=CHECKPOINT_NAME
+   python setup.py develop
+   parlai display_data --task dailydialog
+   parlai display_data --task empathetic_dialogues
+   parlai display_data --task personachat
+   parlai display_data --task blended_skill_talk
+   cd ..
    ```
 
-   - `--mode`: You have to specify the mode among two options, 'train' or 'inference'.
-   - `--ckpt_name`: This specifies the checkpoint file name. If this argument is not specified, then the model would be trained from the beginning and the default checkpoint name becomes `{ckpt_name}`. If you specified the checkpoint name but it does not exist, then the name you put becomes the checkpoint name and the training startes from the beginning. If the name is already that of existing trained model, then the training will be continued starting with that specified checkpoint. (default: `None`)
+   ParlAI has a lot of useful dialogue corpus beside 4 datasets mentioned above.
+
+   You can check the list of the tasks it supports in the document.
 
    <br/>
 
-4. Run below command to conduct an inference with the trained model.
+4. Parse each data and save them info `*.pickle` and `*.json` files. (After parsing, you can delete ParlAI repo.)
 
    ```shell
-   python src/main.py --config_path=PATH_TO_CONFIGURATION_FILE --mode='inference' --ckpt_name=CHECKPOINT_NAME
+   python src/parse_data.py --data_dir=DATA_DIR
    ```
 
-   - `--ckpt_name`: Unlike the case in the training mode, this must specify the name of trained checkpoint which exists.
+   - `--data_dir`: The name of the parent directory where the whole data files are stored. (default: `"data"`)
+
+   <br/>
+
+5. Run the following command to train the model.
+
+   ```shell
+   sh exec_train.sh
+   ```
+
+   <br/>
+
+6. Run below command to conduct an inference with the trained model.
+
+   ```shell
+   sh exec_infer.sh
+   ```
+
 
 <br/>
 
@@ -149,4 +173,8 @@ But they are just for checking how the trimmed utterances look like, so they are
 <a id="4">[4]</a> Zhang, S., Dinan, E., Urbanek, J., Szlam, A., Kiela, D., & Weston, J. (2018). Personalizing dialogue agents: I have a dog, do you have pets too?. *arXiv preprint arXiv:1801.07243*. ([https://arxiv.org/abs/1801.07243](https://arxiv.org/abs/1801.07243))
 
 <a id="5">[5]</a> Smith, E. M., Williamson, M., Shuster, K., Weston, J., & Boureau, Y. L. (2020). Can You Put it All Together: Evaluating Conversational Agents' Ability to Blend Skills. *arXiv preprint arXiv:2004.08449*. ([https://arxiv.org/abs/2004.08449](https://arxiv.org/abs/2004.08449))
+
+<a id="6">[6]</a> Miller, A. H., Feng, W., Fisch, A., Lu, J., Batra, D., Bordes, A., ... & Weston, J. (2017). Parlai: A dialog research software platform. *arXiv preprint arXiv:1705.06476*. ([https://arxiv.org/abs/1705.06476](https://arxiv.org/abs/1705.06476))
+
+<a id="7">[7]</a> https://parl.ai/docs/index.html
 

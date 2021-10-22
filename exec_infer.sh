@@ -8,7 +8,6 @@ python src/main.py \
     --src_max_len=128 \
     --max_turns=10 \
     --trg_max_len=128 \
-    --dropout=0.1 \
     --gpus="0" \
     --top_p=0.9 \
     --end_command="Abort!" \
