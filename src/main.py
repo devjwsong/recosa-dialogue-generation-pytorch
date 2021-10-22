@@ -11,6 +11,7 @@ import torch
 import os
 import argparse
 import copy
+import readline
 
 
 def train(args):
