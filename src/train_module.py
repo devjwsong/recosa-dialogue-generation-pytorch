@@ -99,7 +99,7 @@ class TrainModule(pl.LightningModule):
         outputs = self.model(src_idxs, trg_idxs[:, :-1], src_poses, trg_poses, e_masks, d_masks)  # (B, T_L, V)
         
         preds = torch.max(outputs, dim=-1).indices  # (B, T_L)
-        loss = self.loss_func(outputs.view(-1, self.args.vocab_size), trg_idxs[:, 1:].view(-1))
+        loss = self.loss_func(outputs.contiguous().view(-1, self.args.vocab_size), trg_idxs[:, 1:].contiguous().view(-1))
         ppl = torch.exp(loss)
         
         return {'loss': loss.detach(), 'ppl': ppl.detach()}
@@ -128,7 +128,7 @@ class TrainModule(pl.LightningModule):
         outputs = self.model(src_idxs, trg_idxs[:, :-1], src_poses, trg_poses, e_masks, d_masks)  # (B, T_L, V)
         
         preds = torch.max(outputs, dim=-1).indices  # (B, T_L)
-        loss = self.loss_func(outputs.view(-1, self.args.vocab_size), trg_idxs[:, 1:].view(-1))
+        loss = self.loss_func(outputs.contiguous().view(-1, self.args.vocab_size), trg_idxs[:, 1:].contiguous().view(-1))
         ppl = torch.exp(loss)
         
         return {'loss': loss.detach(), 'ppl': ppl.detach()}

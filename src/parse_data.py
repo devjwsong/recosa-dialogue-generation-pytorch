@@ -10,7 +10,7 @@ import json
 # For all
 data_list = ['daily_dialog', 'empathetic_dialogues', 'persona_chat', 'blended_skill_talk']
 
-# One dialogue consists of two persona lists + turns (Personas might be empty)
+# One dialogue consists of two persona lists and turns (Personas might be empty)
 # {
 #   persona1: [...],
 #   persona2: [...],
@@ -27,6 +27,8 @@ def parse_daily_dialog(args):
     
     num_train_dials, num_valid_dials, num_test_dials = 0, 0, 0
     num_train_utters, num_valid_utters, num_test_utters = 0, 0, 0
+    min_num_pers, max_num_pers, total_num_pers = 1e+8, 0, 0
+    min_num_turns, max_num_turns, total_num_turns = 1e+8, 0, 0
     for file in files:
         print(file)
         prefix = file.split("/")[-1].split(".")[0]  # "train" or "valid" or "test"
@@ -40,6 +42,15 @@ def parse_daily_dialog(args):
             for turn in dialogue:
                 text = turn['text']
                 turns.append(text)
+                
+            min_num_pers = min(min_num_pers, 0)
+            max_num_pers = max(max_num_pers, 0)
+            total_num_pers += 0
+            
+            min_num_turns = min(min_num_turns, len(turns))
+            max_num_turns = max(max_num_turns, len(turns))
+            total_num_turns += len(turns)
+            
             parsed_dials.append({"persona1": [], "persona2": [], "turns": turns})
         
         num_dials = len(parsed_dials)
@@ -59,8 +70,26 @@ def parse_daily_dialog(args):
         
         with open(f"{save_dir}/{prefix}.pickle", 'wb') as f:
             pickle.dump(parsed_dials, f)
+            
+    data_info ={
+        "num_train_dials": num_train_dials,
+        "num_valid_dials": num_valid_dials,
+        "num_test_dials": num_test_dials,
+        "num_train_utters": num_train_utters,
+        "num_valid_utters": num_valid_utters,
+        "num_test_utters": num_test_utters,
+        "max_num_pers": max_num_pers,
+        "min_num_pers": min_num_pers,
+        "avg_num_pers": round(total_num_pers / (num_train_dials + num_valid_dials + num_test_dials), 2),
+        "max_num_turns": max_num_turns,
+        "min_num_turns": min_num_turns,
+        "avg_num_turns": round(total_num_turns / (num_train_dials + num_valid_dials + num_test_dials), 2),
+    }
     
-    return num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters
+    with open(f"{save_dir}/data_info.json", 'w') as f:
+        json.dump(data_info, f)
+    
+    return data_info
     
     
 def parse_empathetic_dialogues(args):
@@ -74,6 +103,8 @@ def parse_empathetic_dialogues(args):
     
     num_train_dials, num_valid_dials, num_test_dials = 0, 0, 0
     num_train_utters, num_valid_utters, num_test_utters = 0, 0, 0
+    min_num_pers, max_num_pers, total_num_pers = 1e+8, 0, 0
+    min_num_turns, max_num_turns, total_num_turns = 1e+8, 0, 0
     for file in files:
         print(file)
         prefix = file.split("/")[-1].split(".")[0]  # "train" or "valid" or "test"
@@ -92,7 +123,16 @@ def parse_empathetic_dialogues(args):
                 
             if cur_conv_id != comps[0]:
                 if len(turns) > 0:
+                    min_num_pers = min(min_num_pers, 0)
+                    max_num_pers = max(max_num_pers, 0)
+                    total_num_pers += 0
+
+                    min_num_turns = min(min_num_turns, len(turns))
+                    max_num_turns = max(max_num_turns, len(turns))
+                    total_num_turns += len(turns)
+                    
                     dials.append({"persona1": [], "persona2": [], "turns": turns})
+                    
                 turns = []
             else:
                 assert int(comps[4]) != int(lines[l-1].strip().split(',')[4])
@@ -103,6 +143,14 @@ def parse_empathetic_dialogues(args):
             turns.append(utter.replace(comma_symbol, ","))
         
         if len(turns) > 0:
+            min_num_pers = min(min_num_pers, 0)
+            max_num_pers = max(max_num_pers, 0)
+            total_num_pers += 0
+            
+            min_num_turns = min(min_num_turns, len(turns))
+            max_num_turns = max(max_num_turns, len(turns))
+            total_num_turns += len(turns)
+            
             dials.append({"persona1": [], "persona2": [], "turns": turns})
             
         num_dials = len(dials)
@@ -123,7 +171,25 @@ def parse_empathetic_dialogues(args):
         with open(f"{save_dir}/{prefix}.pickle", 'wb') as f:
             pickle.dump(dials, f)
     
-    return num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters
+    data_info ={
+        "num_train_dials": num_train_dials,
+        "num_valid_dials": num_valid_dials,
+        "num_test_dials": num_test_dials,
+        "num_train_utters": num_train_utters,
+        "num_valid_utters": num_valid_utters,
+        "num_test_utters": num_test_utters,
+        "max_num_pers": max_num_pers,
+        "min_num_pers": min_num_pers,
+        "avg_num_pers": round(total_num_pers / (num_train_dials + num_valid_dials + num_test_dials), 2),
+        "max_num_turns": max_num_turns,
+        "min_num_turns": min_num_turns,
+        "avg_num_turns": round(total_num_turns / (num_train_dials + num_valid_dials + num_test_dials), 2),
+    }
+    
+    with open(f"{save_dir}/data_info.json", 'w') as f:
+        json.dump(data_info, f)
+    
+    return data_info
     
 
 def parse_persona_chat(args):
@@ -135,6 +201,8 @@ def parse_persona_chat(args):
     
     num_train_dials, num_valid_dials, num_test_dials = 0, 0, 0
     num_train_utters, num_valid_utters, num_test_utters = 0, 0, 0
+    min_num_pers, max_num_pers, total_num_pers = 1e+8, 0, 0
+    min_num_turns, max_num_turns, total_num_turns = 1e+8, 0, 0
     for file in files:
         print(file)
         prefix = file.split("/")[-1].split("_")[0]  # "train" or "valid" or "test"
@@ -151,6 +219,14 @@ def parse_persona_chat(args):
             if cur_idx+1 != int(idx):
                 assert int(idx) == 1
                 if len(turns) > 0 and len(pers) > 0:
+                    min_num_pers = min(min_num_pers, len(pers))
+                    max_num_pers = max(max_num_pers, len(pers))
+                    total_num_pers += len(pers)
+
+                    min_num_turns = min(min_num_turns, len(turns))
+                    max_num_turns = max(max_num_turns, len(turns))
+                    total_num_turns += len(turns)
+                    
                     dials.append({"persona1": [], "persona2": pers, "turns": turns})
                 turns, pers = [], []
 
@@ -164,6 +240,14 @@ def parse_persona_chat(args):
             cur_idx = int(idx)
             
         if len(turns) > 0 and len(pers) > 0:
+            min_num_pers = min(min_num_pers, len(pers))
+            max_num_pers = max(max_num_pers, len(pers))
+            total_num_pers += len(pers)
+
+            min_num_turns = min(min_num_turns, len(turns))
+            max_num_turns = max(max_num_turns, len(turns))
+            total_num_turns += len(turns)
+            
             dials.append({"persona1": [], "persona2": pers, "turns": turns})
             
         num_dials = len(dials)
@@ -184,7 +268,25 @@ def parse_persona_chat(args):
         with open(f"{save_dir}/{prefix}.pickle", 'wb') as f:
             pickle.dump(dials, f)
     
-    return num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters
+    data_info ={
+        "num_train_dials": num_train_dials,
+        "num_valid_dials": num_valid_dials,
+        "num_test_dials": num_test_dials,
+        "num_train_utters": num_train_utters,
+        "num_valid_utters": num_valid_utters,
+        "num_test_utters": num_test_utters,
+        "max_num_pers": max_num_pers,
+        "min_num_pers": min_num_pers,
+        "avg_num_pers": round(total_num_pers / (num_train_dials + num_valid_dials + num_test_dials), 2),
+        "max_num_turns": max_num_turns,
+        "min_num_turns": min_num_turns,
+        "avg_num_turns": round(total_num_turns / (num_train_dials + num_valid_dials + num_test_dials), 2),
+    }
+    
+    with open(f"{save_dir}/data_info.json", 'w') as f:
+        json.dump(data_info, f)
+    
+    return data_info
 
 
 def parse_blended_skill_talk(args):
@@ -197,6 +299,8 @@ def parse_blended_skill_talk(args):
     
     num_train_dials, num_valid_dials, num_test_dials = 0, 0, 0
     num_train_utters, num_valid_utters, num_test_utters = 0, 0, 0
+    min_num_pers, max_num_pers, total_num_pers = 1e+8, 0, 0
+    min_num_turns, max_num_turns, total_num_turns = 1e+8, 0, 0
     for file in files:
         print(file)
         prefix = file.split("/")[-1].split(".")[0]  # "train" or "valid" or "test"
@@ -218,6 +322,14 @@ def parse_blended_skill_talk(args):
                 
             dial["turns"] = turns
             dials.append(dial)
+            
+            min_num_pers = min(min_num_pers, min(len(persona1), len(persona2)))
+            max_num_pers = max(max_num_pers, max(len(persona1), len(persona2)))
+            total_num_pers += (len(persona1) + len(persona2))
+
+            min_num_turns = min(min_num_turns, len(turns))
+            max_num_turns = max(max_num_turns, len(turns))
+            total_num_turns += len(turns)
 
         num_dials = len(dials)
         num_utters = 0
@@ -237,7 +349,25 @@ def parse_blended_skill_talk(args):
         with open(f"{save_dir}/{prefix}.pickle", 'wb') as f:
             pickle.dump(dials, f)
     
-    return num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters
+    data_info ={
+        "num_train_dials": num_train_dials,
+        "num_valid_dials": num_valid_dials,
+        "num_test_dials": num_test_dials,
+        "num_train_utters": num_train_utters,
+        "num_valid_utters": num_valid_utters,
+        "num_test_utters": num_test_utters,
+        "max_num_pers": max_num_pers,
+        "min_num_pers": min_num_pers,
+        "avg_num_pers": round(total_num_pers / (num_train_dials + num_valid_dials + num_test_dials), 2),
+        "max_num_turns": max_num_turns,
+        "min_num_turns": min_num_turns,
+        "avg_num_turns": round(total_num_turns / (num_train_dials + num_valid_dials + num_test_dials), 2),
+    }
+    
+    with open(f"{save_dir}/data_info.json", 'w') as f:
+        json.dump(data_info, f)
+    
+    return data_info
 
     
 
@@ -302,27 +432,22 @@ if __name__=='__main__':
         print("#"*50 + f" {d+1}: {data} " + "#"*50)
     
         if data == 'daily_dialog':
-            num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters = parse_daily_dialog(args)
+            data_info = parse_daily_dialog(args)
         elif data == 'empathetic_dialogues':
-            num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters = parse_empathetic_dialogues(args)
+            data_info = parse_empathetic_dialogues(args)
         elif data == 'persona_chat':
-            num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters = parse_persona_chat(args)
+            data_info = parse_persona_chat(args)
         elif data == 'blended_skill_talk':
-            num_train_dials, num_valid_dials, num_test_dials, num_train_utters, num_valid_utters, num_test_utters = parse_blended_skill_talk(args)
+            data_info = parse_blended_skill_talk(args)
         
-        print(f"The number of train dialogues: {num_train_dials}")
-        print(f"The number of validation dialogues: {num_valid_dials}")
-        print(f"The number of test dialogues: {num_test_dials}")
-        print(f"The number of train utterances: {num_train_utters}")    
-        print(f"The number of validation utterances: {num_valid_utters}")
-        print(f"The number of test utterances: {num_test_utters}")
+        print(data_info)
         
-        total_num_train_dials += num_train_dials
-        total_num_valid_dials += num_valid_dials
-        total_num_test_dials += num_test_dials
-        total_num_train_utters += num_train_utters
-        total_num_valid_utters += num_valid_utters
-        total_num_test_utters += num_test_utters
+        total_num_train_dials += data_info["num_train_dials"]
+        total_num_valid_dials += data_info["num_valid_dials"]
+        total_num_test_dials += data_info["num_test_dials"]
+        total_num_train_utters += data_info["num_train_utters"]
+        total_num_valid_utters += data_info["num_valid_utters"]
+        total_num_test_utters += data_info["num_test_utters"]
         
     print("#"*50 + "Total data statistics" + "#"*50)
     print(f"The number of train dialogues: {total_num_train_dials}")

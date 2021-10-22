@@ -3,6 +3,7 @@ from tqdm import tqdm
 
 import torch
 import pickle
+import json
 
 
 class CustomDataset(Dataset):
@@ -12,13 +13,18 @@ class CustomDataset(Dataset):
         print(f"Loading {data_type} data...")
         with open(f"{args.task_dir}/{data_type}.pickle", "rb") as f:
             dials = pickle.load(f)
+        
+        with open(f"{args.task_dir}/data_info.json", "r") as f:
+            data_info = json.load(f)
             
         self.src_idxs = []  # (N, T, S_L)
         self.num_valid_turns = []  # (N)
         self.trg_idxs = []  # (N, T_L)
         
-        hists = []
+        max_pers = data_info["max_num_pers"]
+        num_contexts = max_pers + args.max_turns
         for dial in tqdm(dials):
+            hists = []
             persona1, persona2, turns = dial['persona1'], dial['persona2'], dial['turns']
             
             pers = []  # The system's persona will be handled as extra histories without a speacker token. (or maybe empty...)
@@ -46,17 +52,24 @@ class CustomDataset(Dataset):
                         start = 0
                     context = hists[start:end]
                     assert len(context) > 0
+                                        
+                    if len(pers) > 0:
+                        context = pers + context
                     
                     self.num_valid_turns.append(len(context))
                     
-                    if len(context) < args.max_turns:
-                        num_extras = args.max_turns - len(context)
+                    if len(context) < num_contexts:
+                        num_extras = num_contexts - len(context)
                         context += [[args.bos_id, args.eos_id]] * num_extras
-                    assert len(context) == args.max_turns
+                    assert len(context) == num_contexts
                     
-                    if len(pers) > 0:
-                        context = pers + context
-                    self.src_idxs.append([self.padding(token_idxs, args.src_max_len, args.pad_id) for token_idxs in context])
+                    self.src_idxs.append(context)
+        
+        # Padding
+        for c, context in enumerate(self.src_idxs):
+            for i, utter in enumerate(self.src_idxs[c]):
+                token_idxs = self.src_idxs[c][i]
+                self.src_idxs[c][i] = self.padding(token_idxs, args.src_max_len, args.pad_id)
         
         assert len(self.src_idxs) == len(self.trg_idxs)
         assert len(self.src_idxs) == len(self.num_valid_turns)
@@ -93,5 +106,15 @@ class PadCollate():
 
         trg_idxs = torch.nn.utils.rnn.pad_sequence(trg_idxs, batch_first=True, padding_value=self.pad_id)  # (B, T_L)
         
-        return torch.LongTensor(src_idxs).contiguous(), torch.LongTensor(num_valid_turns).contiguous(), trg_idxs.contiguous()
-        
+        try:
+            return torch.LongTensor(src_idxs).contiguous(), torch.LongTensor(num_valid_turns).contiguous(), trg_idxs.contiguous()
+        except:
+            print(f"batch size: {len(src_idxs)}")
+            for b in range(len(src_idxs)):
+                print(f"num turns: {len(src_idxs[b])}")
+
+            print(f"batch size: {len(num_valid_turns)}")
+            print(num_valid_turns)
+
+            print(trg_idxs.shape)
+            exit()
