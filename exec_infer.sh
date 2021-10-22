@@ -1,6 +1,5 @@
 python src/main.py \
     --mode="infer" \
-    --seed=0 \
     --pad_token="<pad>" \
     --bos_token="<bos>" \
     --eos_token="<eos>" \

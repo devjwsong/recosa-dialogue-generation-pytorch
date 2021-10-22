@@ -39,7 +39,11 @@ class TrainModule(pl.LightningModule):
         
         # Model
         print("Initializing the model...")
-        seed_everything(args.seed, workers=True)
+        if args.mode == "train":
+            seed_everything(args.seed, workers=True)
+        elif args.mode == "infer":
+            seed_everything(int(time.time()), workers=True)
+            
         self.model = ReCoSaTransformer(args)
         self.model.init_model()
         

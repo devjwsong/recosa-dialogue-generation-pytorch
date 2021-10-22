@@ -1,8 +1,6 @@
 from train_module import *
 from custom_dataset import *
-from tqdm import tqdm
 from torch.utils.data import DataLoader
-from torch.nn import functional as F
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.plugins import DDPPlugin
