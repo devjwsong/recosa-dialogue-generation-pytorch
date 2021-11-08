@@ -1,4 +1,4 @@
-# transformer-chatbot-pytorch
+# recosa-dialogue-generation-pytorch
 
 This is a multi-turn chatbot project using the **ReCoSa** structure introduced in *ReCoSa: Detecting the Relevant Contexts with Self-Attention for
 Multi-turn Dialogue Generation*[[1]](#1).
