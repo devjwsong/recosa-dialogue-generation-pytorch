@@ -19,35 +19,35 @@ The details of structure are as follows.
 
 | Argument              | Type              | Description                                                  | Default               |
 | --------------------- | ----------------- | ------------------------------------------------------------ | --------------------- |
-| `--seed` | `int` | The random seed number for training. | `0` |
-| `--data_dir`          | `str`       | The name of the parent directory where the whole data files are stored. | `"data"`              |
-| `--task`     | `str`       | The name of the specific task(dataset) name. (`"daily_dialog"`, `"empathetic_dialogues"`, `"persona_chat"`, `"blended_skill_talk"`) | *YOU MUST SPECIFY* |
-| `--pad_token`         | `str`        | The pad token.                             | `"<pad>"`             |
-| `--bos_token`         | `str`       | The bos token.          | `"<bos>"`             |
-| `--eos_token`         | `str`       | The eos token.                | `"<eos>"`             |
-| `--sp1_token` | `str` | The speaker1 token. | `"<sp1>"` |
-| `--sp2_token` | `str` | The speaker2 token. | `"<sp2>"` |
-| `--learning_rate`     | `float` | The initial learning rate.                                   | `5e-4`                |
-| `--warmup_ratio` | `float` | The warmup step ratio. | `0.0` |
-| `--max_grad_norm` | `float` | The max value for gradient clipping. | `1.0` |
-| `--train_batch_size` | `int` | The batch size for training.                   | `32`              |
-| `--eval_batch_size` | `int` | The batch size for evaluation. | `8` |
-| `--num_workers` | `int` | The number of workers for data loading. | `0` |
-| `--num_epochs`        | `int` | The number of training epochs. | `10`              |
-| `--src_max_len` | `int` | The max length of each input utterance. | `128`                 |
-| `--max_turns` | `int` | The max number of utterances to be included. | `10` |
-| `--trg_max_len` | `int` | The max length of a target response. | `128` |
-| `--num_heads`         | `int` | The number of heads for multi-head attention. | `8`                   |
-| `--num_encoder_layers` | `int` | The number of layers in the utterance-level encoder. | `6`                   |
-| `--num_gru_layers` | `int` | The number of layers in the word-level encoder. | `2` |
-| `--gru_dropout` | `float` | The dropout rate of the word-level encoder. | `0.1` |
-| `--num_decoder_layers` | `int` | The number of layers in the decoder. | `2`                  |
-| `--d_model`           | `int` | The hidden size inside of the transformer module. | `768`              |
-| `--d_pos` | `int` | The hidden size of the positional embedding. | `256` |
-| `--d_ff`              | `int` | The intermediate hidden size of each feed-forward layer. | `2048`                |
-| `--dropout`           | `int` | The dropout rate of the transformer modules. | `0.1`                 |
-| `--gpus` | `str` | The indices of GPUs to use. (This should be a string which contains index values separated with commas. ex: `"0, 1, 2, 3"`) | `"0"` |
-| `--num_nodes` | `int` | The number of machine. | `1` |
+| `seed` | `int` | The random seed number for training. | `0` |
+| `data_dir`          | `str`       | The name of the parent directory where the whole data files are stored. | `"data"`              |
+| `task`     | `str`       | The name of the specific task(dataset) name. (`"daily_dialog"`, `"empathetic_dialogues"`, `"persona_chat"`, `"blended_skill_talk"`) | *YOU MUST SPECIFY* |
+| `pad_token`         | `str`        | The pad token.                             | `"<pad>"`             |
+| `bos_token`         | `str`       | The bos token.          | `"<bos>"`             |
+| `eos_token`         | `str`       | The eos token.                | `"<eos>"`             |
+| `sp1_token` | `str` | The speaker1 token. | `"<sp1>"` |
+| `sp2_token` | `str` | The speaker2 token. | `"<sp2>"` |
+| `learning_rate`     | `float` | The initial learning rate.                                   | `5e-4`                |
+| `warmup_ratio` | `float` | The warmup step ratio. | `0.0` |
+| `max_grad_norm` | `float` | The max value for gradient clipping. | `1.0` |
+| `train_batch_size` | `int` | The batch size for training.                   | `32`              |
+| `eval_batch_size` | `int` | The batch size for evaluation. | `8` |
+| `num_workers` | `int` | The number of workers for data loading. | `0` |
+| `num_epochs`        | `int` | The number of training epochs. | `10`              |
+| `src_max_len` | `int` | The max length of each input utterance. | `128`                 |
+| `max_turns` | `int` | The max number of utterances to be included. | `10` |
+| `trg_max_len` | `int` | The max length of a target response. | `128` |
+| `num_heads`         | `int` | The number of heads for multi-head attention. | `8`                   |
+| `num_encoder_layers` | `int` | The number of layers in the utterance-level encoder. | `6`                   |
+| `num_gru_layers` | `int` | The number of layers in the word-level encoder. | `2` |
+| `gru_dropout` | `float` | The dropout rate of the word-level encoder. | `0.1` |
+| `num_decoder_layers` | `int` | The number of layers in the decoder. | `2`                  |
+| `d_model`           | `int` | The hidden size inside of the transformer module. | `768`              |
+| `d_pos` | `int` | The hidden size of the positional embedding. | `256` |
+| `d_ff`              | `int` | The intermediate hidden size of each feed-forward layer. | `2048`                |
+| `dropout`           | `int` | The dropout rate of the transformer modules. | `0.1`                 |
+| `gpus` | `str` | The indices of GPUs to use. (This should be a string which contains index values separated with commas. ex: `"0, 1, 2, 3"`) | `"0"` |
+| `num_nodes` | `int` | The number of machine. | `1` |
 
 <br/>
 
@@ -55,19 +55,19 @@ The details of structure are as follows.
 
 | Argument        | Type    | Description                                                  | Default            |
 | --------------- | ------- | ------------------------------------------------------------ | ------------------ |
-| `--pad_token`   | `str`   | The pad token.                                               | `"<pad>"`          |
-| `--bos_token`   | `str`   | The bos token.                                               | `"<bos>"`          |
-| `--eos_token`   | `str`   | The eos token.                                               | `"<eos>"`          |
-| `--sp1_token`   | `str`   | The speaker1 token.                                          | `"<sp1>"`          |
-| `--sp2_token`   | `str`   | The speaker2 token.                                          | `"<sp2>"`          |
-| `--src_max_len` | `int`   | The max length of each input utterance.                      | `128`              |
-| `--max_turns`   | `int`   | The max number of utterances to be included.                 | `10`               |
-| `--trg_max_len` | `int`   | The max length of a target response.                         | `128`              |
-| `--gpus`        | `str`   | The indices of GPUs to use. (When inferencing, only a single GPU is used. If you try to set mutiple GPUs, the assertion error will be raised.) | `"0"`              |
-| `--top_p`       | `float` | The top-p value for nucleus sampling decoding.               | `0.9`              |
-| `--end_command` | `str`   | The command to stop the conversation when inferencing.       | `"Abort!"`         |
-| `--log_idx`     | `int`   | The index of a lightning log directory which contains the checkpoints to use. | *YOU MUST SPECIFY* |
-| `--ckpt_file`   | `str`   | The full name of the trained checkpoint for inference.       | *YOU MUST SPECIFY* |
+| `pad_token`   | `str`   | The pad token.                                               | `"<pad>"`          |
+| `bos_token`   | `str`   | The bos token.                                               | `"<bos>"`          |
+| `eos_token`   | `str`   | The eos token.                                               | `"<eos>"`          |
+| `sp1_token`   | `str`   | The speaker1 token.                                          | `"<sp1>"`          |
+| `sp2_token`   | `str`   | The speaker2 token.                                          | `"<sp2>"`          |
+| `src_max_len` | `int`   | The max length of each input utterance.                      | `128`              |
+| `max_turns`   | `int`   | The max number of utterances to be included.                 | `10`               |
+| `trg_max_len` | `int`   | The max length of a target response.                         | `128`              |
+| `gpus`        | `str`   | The indices of GPUs to use. (When inferencing, only a single GPU is used. If you try to set mutiple GPUs, the assertion error will be raised.) | `"0"`              |
+| `top_p`       | `float` | The top-p value for nucleus sampling decoding.               | `0.9`              |
+| `end_command` | `str`   | The command to stop the conversation when inferencing.       | `"Abort!"`         |
+| `log_idx`     | `int`   | The index of a lightning log directory which contains the checkpoints to use. | *YOU MUST SPECIFY* |
+| `ckpt_file`   | `str`   | The full name of the trained checkpoint for inference.       | *YOU MUST SPECIFY* |
 
 <br/>
 
